@@ -103,6 +103,10 @@ See `src/core/character.h` (`char_off`) for the full list. Key ones:
 ## Conventions / hygiene
 
 - **Commit and push regularly.** The workspace can reset; unpushed work is lost.
+- Work on a branch and open a PR; CI (`.github/workflows/build.yml`) builds and
+  runs `ctest` on every PR and on `main`. Merge only when CI is green and the PR
+  is `MERGEABLE`/`CLEAN`. The repo has no other maintainers, so the agent owns
+  reviewing and merging its own PRs.
 - `testdata/` is committed on purpose (small fixtures needed by the tests).
   Real game data (`game/`, `GAME*` archives, `*.EXE`) must **not** be committed.
 - Keep `src/core` free of Qt and of any GUI dependency so the planned editors
