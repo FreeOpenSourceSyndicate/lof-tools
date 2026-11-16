@@ -68,7 +68,7 @@ This produces:
 | Binary                | What it is |
 |-----------------------|------------|
 | `build/lof-tools`     | The Qt6 GUI (built when Qt6 is found) |
-| `build/lof-sanitize`  | Headless CLI sanitizer |
+| `build/lof-cli`       | Headless CLI (sanitizer + character dump) |
 | `build/lof-tests`     | Unit tests |
 
 Run the GUI:
@@ -77,6 +77,8 @@ Run the GUI:
 ./build/lof-tools
 # or open a file straight away:
 ./build/lof-tools /path/to/GAME1
+# or open the character editor on a file:
+./build/lof-tools --editor /path/to/ROST
 ```
 
 ## Using the GUI
@@ -85,22 +87,30 @@ Run the GUI:
   protection thinks of it.
 - **Tools > Sanitizer (cheat protection)...** opens the same view without a
   file; use **Open file...** inside it.
-- The dialog lists every problem (per character for a roster, whole-file for a
+  The dialog lists every problem (per character for a roster, whole-file for a
   save) and offers **Fix & Save** to write the repaired file back.
-- **Tools > Save game editor** and **Tools > Character editor** are placeholders
-  for the planned editors.
+- **Tools > Character editor...** opens the character editor. It edits a `ROST`
+  roster or a save game one character at a time: identity, attributes, hit/magic
+  points, experience, gold (purse and deposit), rations, the nine skills, the
+  eight languages, the inventory (48 slots, with item, equipped flag, condition
+  and charges) and the spell list. Saving recomputes the integrity checksum, so
+  the game's cheat protection accepts the file.
+- **Tools > Save game editor** is a placeholder for the planned editor.
 
 ## Using the CLI
 
 ```sh
 # Report only (exit code 1 if the game would flag the file):
-./build/lof-sanitize check GAMES/GAME1
+./build/lof-cli check GAMES/GAME1
 
 # Repair in place:
-./build/lof-sanitize fix GAMES/GAME1
+./build/lof-cli fix GAMES/GAME1
 
 # Repair into a new file (leaves the original alone):
-./build/lof-sanitize fix ROST/ROST ROST/ROST.fixed
+./build/lof-cli fix ROST/ROST ROST/ROST.fixed
+
+# Print every decoded character field (read-only):
+./build/lof-cli dump ROST/ROST
 ```
 
 ## Tests
@@ -112,21 +122,33 @@ ctest --test-dir build --output-on-failure
 ```
 
 The tests run against the committed fixtures in `testdata/` (`ROST1.cheat`,
-`ROST2.banked`, `GAME1`, `GAME4`) and cover the checksum, parsing, detection,
-and end-to-end repair.
+`ROST2.banked`, `ROST.user`, `GAME1`, `GAME4`) and cover the checksum, parsing,
+detection, end-to-end repair, the decoded character fields (asserted value by
+value against the maintainer's character sheet), and the edit round-trip.
+
+## Character format
+
+The full, verified field map of a character record lives in
+[`docs/character-format.md`](docs/character-format.md). Fields are only offered
+for editing once they are confirmed from the disassembly and real data; the
+document lists what is still uncertain.
 
 ## Layout
 
 ```
-src/core/    Reusable, GUI-free data model and cheat-protection logic.
-src/cli/     Headless front-end.
-src/gui/     Qt6 Widgets front-end (menu shell + sanitizer dialog).
-tests/       Unit tests.
-testdata/    Small fixtures used by the tests.
+src/core/         Reusable, GUI-free data model and cheat-protection logic.
+src/core/tables/  Item/spell/name tables transcribed from LOF.EXE.
+src/cli/          Headless front-end (sanitizer + character dump).
+src/gui/          Qt6 Widgets front-end (menu shell + sanitizer + editor).
+tests/            Unit tests.
+testdata/         Small fixtures used by the tests.
+docs/             Format documentation.
 ```
 
-`src/core` is deliberately independent of the GUI so the future save-game and
-character editors can share it.
+`src/core` is deliberately independent of the GUI so the sanitizer, the
+character editor and the future save-game editor share one model. The
+`CharacterDocument` class loads either a `ROST` roster or a save game and hands
+out mutable `Character` records; it is the piece a save-game editor will reuse.
 
 ## License
 

@@ -18,3 +18,11 @@ ui_*.h
 
 # Local test scratch
 *.fixed
+
+# Real game data the user may drop in the working tree (never commit these).
+/ROST
+/GAME*
+/ROST*
+!/testdata/ROST*
+*.EXE
+*.exe

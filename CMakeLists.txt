@@ -16,9 +16,13 @@ endif()
 add_library(lofcore STATIC
   src/core/file_io.cpp
   src/core/checksum.cpp
+  src/core/tables/items.cpp
+  src/core/tables/spells.cpp
+  src/core/names.cpp
   src/core/character.cpp
   src/core/rost.cpp
   src/core/savegame.cpp
+  src/core/document.cpp
   src/core/sanitizer.cpp
 )
 target_include_directories(lofcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -32,8 +36,8 @@ endif()
 # CLI: headless sanitizer (also useful for scripting and for verifying the
 # GUI's results).
 # ---------------------------------------------------------------------------
-add_executable(lof-sanitize src/cli/main.cpp)
-target_link_libraries(lof-sanitize PRIVATE lofcore)
+add_executable(lof-cli src/cli/main.cpp)
+target_link_libraries(lof-cli PRIVATE lofcore)
 
 # ---------------------------------------------------------------------------
 # GUI: Qt6 Widgets front-end.  Optional - the core library and CLI build even
@@ -46,6 +50,7 @@ if(Qt6_FOUND)
     src/gui/main.cpp
     src/gui/main_window.cpp
     src/gui/sanitizer_dialog.cpp
+    src/gui/character_editor_dialog.cpp
   )
   target_link_libraries(lof-tools PRIVATE lofcore Qt6::Widgets)
   if(MSVC)
@@ -53,7 +58,7 @@ if(Qt6_FOUND)
   endif()
   message(STATUS "Qt6 Widgets found - building the GUI (lof-tools)")
 else()
-  message(STATUS "Qt6 Widgets NOT found - building the CLI only (lof-sanitize)")
+  message(STATUS "Qt6 Widgets NOT found - building the CLI only (lof-cli)")
 endif()
 
 # ---------------------------------------------------------------------------

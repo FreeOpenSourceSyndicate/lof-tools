@@ -2,17 +2,49 @@
 
 namespace loftools {
 
-// Profession indices are 0..11; the engine rejects values > 0x0b (the display
-// routine at image 0x2FB4A) and the SNSC seed writes 0x0c ("no profession").
-// 0xff marks an untouched template slot.
-const char* const kProfessionNames[12] = {
-    "Warrior", "Ranger",  "Monk",    "Paladin", "Thief",     "Bard",
-    "Magic user", "Cleric", "Druid", "Rogue",   "Healer",    "Alchemist",
-};
+// Field descriptors drive the editor's form and the "uncertain" marking.  Every
+// field here is either byte-for-byte verified against the user's character sheet
+// (Firm) or grounded in the engine's own code (Likely).  Anything we could only
+// guess at is deliberately *absent* rather than shown as Uncertain, so the
+// editor never offers a value we do not trust.
+const std::vector<FieldInfo>& character_fields() {
+    static const std::vector<FieldInfo> fields = {
+        {"name", "Name", "Identity", FieldConfidence::Firm, ""},
+        {"level", "Rank (level)", "Identity", FieldConfidence::Firm, ""},
+        {"sex", "Sex", "Identity", FieldConfidence::Firm, ""},
+        {"race", "Race", "Identity", FieldConfidence::Firm, ""},
+        {"profession", "Profession", "Identity", FieldConfidence::Firm, ""},
+        {"alignment", "Alignment", "Identity", FieldConfidence::Firm, ""},
 
-std::string profession_name(uint8_t index) {
-    if (index < 12) return kProfessionNames[index];
-    return "none";
+        {"str", "Strength", "Attributes", FieldConfidence::Firm, ""},
+        {"con", "Constitution", "Attributes", FieldConfidence::Firm, ""},
+        {"dex", "Dexterity", "Attributes", FieldConfidence::Firm, ""},
+        {"int", "Intelligence", "Attributes", FieldConfidence::Firm, ""},
+        {"wis", "Wisdom", "Attributes", FieldConfidence::Firm, ""},
+
+        {"hp_cur", "Hit points (current)", "Vitals", FieldConfidence::Firm, ""},
+        {"hp_max", "Hit points (max)", "Vitals", FieldConfidence::Firm, ""},
+        {"mp_cur", "Magic points (current)", "Vitals", FieldConfidence::Firm, ""},
+        {"mp_max", "Magic points (max)", "Vitals", FieldConfidence::Firm, ""},
+
+        {"exp", "Experience", "Progress", FieldConfidence::Firm,
+         "Signed 32-bit; the game allows negative experience."},
+        {"gold", "Gold (purse)", "Money", FieldConfidence::Firm, ""},
+        {"deposit", "Gold (deposit)", "Money", FieldConfidence::Firm, ""},
+        {"rations", "Rations", "Money", FieldConfidence::Firm, ""},
+
+        {"skill_negotiating", "Negotiating", "Skills", FieldConfidence::Firm, ""},
+        {"skill_attack", "Attack", "Skills", FieldConfidence::Firm, ""},
+        {"skill_defence", "Defence", "Skills", FieldConfidence::Firm, ""},
+        {"skill_concentration", "Concentration", "Skills", FieldConfidence::Firm, ""},
+        {"skill_pickpocket", "Pick-pocketing", "Skills", FieldConfidence::Firm, ""},
+        {"skill_stalking", "Stalking", "Skills", FieldConfidence::Firm,
+         "Shown as \"Sneak\" on the in-game sheet."},
+        {"skill_trap_detect", "Trap detecting", "Skills", FieldConfidence::Firm, ""},
+        {"skill_trap_disarm", "Trap disarming", "Skills", FieldConfidence::Firm, ""},
+        {"skill_lockpicking", "Lock picking", "Skills", FieldConfidence::Firm, ""},
+    };
+    return fields;
 }
 
 }  // namespace loftools
