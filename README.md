@@ -83,19 +83,26 @@ Run the GUI:
 
 ## Using the GUI
 
-- **File > Open save / ROST...** opens a file and shows what the cheat
-  protection thinks of it.
-- **Tools > Sanitizer (cheat protection)...** opens the same view without a
-  file; use **Open file...** inside it.
-  The dialog lists every problem (per character for a roster, whole-file for a
-  save) and offers **Fix & Save** to write the repaired file back.
-- **Tools > Character editor...** opens the character editor. It edits a `ROST`
-  roster or a save game one character at a time: identity, attributes, hit/magic
-  points, experience, gold (purse and deposit), rations, the nine skills, the
-  eight languages, the inventory (48 slots, with item, equipped flag, condition
-  and charges) and the spell list. Saving recomputes the integrity checksum, so
-  the game's cheat protection accepts the file.
-- **Tools > Save game editor** is a placeholder for the planned editor.
+The window opens on a welcome page. **File > Open save / ROST...** loads a file
+and switches to the tools, which are shown as **tabs** (one per tool, so new
+tools appear as new tabs):
+
+- **Sanitizer** - lists every problem the cheat protection would find (per
+  character for a roster, whole-file for a save) and offers **Fix & Save** to
+  write the repaired file back.
+- **Character editor** - edits a `ROST` roster or a save game one character at a
+  time: identity, attributes, hit/magic points, experience, gold (purse and
+  deposit), rations, the nine skills, the eight languages, the inventory (48
+  slots, with item, equipped flag, condition and charges) and the spell list.
+  Saving recomputes the integrity checksum, so the game's cheat protection
+  accepts the file. It has its own **Open file...** button too.
+
+Opening a file loads it into *every* tool at once, so you can switch tabs without
+re-opening. **File > Reload** re-reads it and **File > Close file** returns to the
+welcome page. When a tool writes the file, the other tabs refresh. The **Tools**
+menu switches between tabs (and opens a file first if none is loaded). The window
+sizes itself to fit the screen and the tool tabs scroll, so it works on small
+displays.
 
 ## Using the CLI
 
@@ -139,7 +146,7 @@ document lists what is still uncertain.
 src/core/         Reusable, GUI-free data model and cheat-protection logic.
 src/core/tables/  Item/spell/name tables transcribed from LOF.EXE.
 src/cli/          Headless front-end (sanitizer + character dump).
-src/gui/          Qt6 Widgets front-end (menu shell + sanitizer + editor).
+src/gui/          Qt6 Widgets front-end (tabbed shell + tool panels).
 tests/            Unit tests.
 testdata/         Small fixtures used by the tests.
 docs/             Format documentation.

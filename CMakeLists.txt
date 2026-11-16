@@ -49,8 +49,9 @@ if(Qt6_FOUND)
   add_executable(lof-tools
     src/gui/main.cpp
     src/gui/main_window.cpp
-    src/gui/sanitizer_dialog.cpp
-    src/gui/character_editor_dialog.cpp
+    src/gui/tool_panel.h
+    src/gui/sanitizer_panel.cpp
+    src/gui/character_editor_panel.cpp
   )
   target_link_libraries(lof-tools PRIVATE lofcore Qt6::Widgets)
   if(MSVC)

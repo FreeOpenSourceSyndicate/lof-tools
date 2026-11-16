@@ -1,8 +1,7 @@
-#include "gui/sanitizer_dialog.h"
+#include "gui/sanitizer_panel.h"
 
-#include <QFileDialog>
 #include <QFileInfo>
-#include <QFontDatabase>
+#include <QFont>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -13,15 +12,8 @@
 
 namespace loftools {
 
-SanitizerDialog::SanitizerDialog(QWidget* parent) : QDialog(parent) {
-    setWindowTitle(tr("Cheat-protection Sanitizer"));
-    resize(680, 440);
-
+SanitizerPanel::SanitizerPanel(QWidget* parent) : ToolPanel(parent) {
     auto* root = new QVBoxLayout(this);
-
-    file_label_ = new QLabel(tr("No file loaded."), this);
-    file_label_->setWordWrap(true);
-    root->addWidget(file_label_);
 
     verdict_label_ = new QLabel(this);
     QFont vf = verdict_label_->font();
@@ -41,49 +33,33 @@ SanitizerDialog::SanitizerDialog(QWidget* parent) : QDialog(parent) {
     root->addWidget(table_, 1);
 
     auto* buttons = new QHBoxLayout();
-    auto* browse_button = new QPushButton(tr("Open file..."), this);
     recheck_button_ = new QPushButton(tr("Re-check"), this);
     fix_button_ = new QPushButton(tr("Fix && Save"), this);
     fix_button_->setDefault(true);
-    auto* close_button = new QPushButton(tr("Close"), this);
-    buttons->addWidget(browse_button);
     buttons->addWidget(recheck_button_);
     buttons->addStretch(1);
     buttons->addWidget(fix_button_);
-    buttons->addWidget(close_button);
     root->addLayout(buttons);
 
-    connect(browse_button, &QPushButton::clicked, this, &SanitizerDialog::browse);
-    connect(recheck_button_, &QPushButton::clicked, this, &SanitizerDialog::recheck);
-    connect(fix_button_, &QPushButton::clicked, this, &SanitizerDialog::fix);
-    connect(close_button, &QPushButton::clicked, this, &QDialog::accept);
+    connect(recheck_button_, &QPushButton::clicked, this, &SanitizerPanel::recheck);
+    connect(fix_button_, &QPushButton::clicked, this, &SanitizerPanel::fix);
 
     update_buttons();
 }
 
-void SanitizerDialog::browse() {
-    const QString start = path_.isEmpty() ? QString() : QFileInfo(path_).absolutePath();
-    const QString path = QFileDialog::getOpenFileName(
-        this, tr("Open save game or ROST"), start,
-        tr("Save / ROST (*.SAV GAME* ROST*);;All files (*)"));
-    if (path.isEmpty()) return;
-    load_and_show(path);
-}
-
-void SanitizerDialog::load_and_show(const QString& path) {
+bool SanitizerPanel::load_file(const QString& path) {
     path_ = path;
     set_report(inspect(path.toStdString()));
+    return report_.file_ok;
 }
 
-void SanitizerDialog::recheck() {
+void SanitizerPanel::recheck() {
     if (path_.isEmpty()) return;
     set_report(inspect(path_.toStdString()));
 }
 
-void SanitizerDialog::set_report(const SanitizeReport& rep) {
+void SanitizerPanel::set_report(const SanitizeReport& rep) {
     report_ = rep;
-
-    file_label_->setText(tr("File: %1").arg(path_.isEmpty() ? tr("(none)") : path_));
 
     const char* kind = "unknown";
     switch (rep.kind) {
@@ -123,7 +99,7 @@ void SanitizerDialog::set_report(const SanitizeReport& rep) {
     update_buttons();
 }
 
-void SanitizerDialog::update_buttons() {
+void SanitizerPanel::update_buttons() {
     const bool loaded = report_.file_ok;
     const bool can_fix = loaded && report_.flagged && !report_.fixed;
     recheck_button_->setEnabled(loaded);
@@ -132,7 +108,7 @@ void SanitizerDialog::update_buttons() {
                                     : tr("Nothing to fix"));
 }
 
-void SanitizerDialog::fix() {
+void SanitizerPanel::fix() {
     if (path_.isEmpty()) return;
     SanitizeReport rep = sanitize(path_.toStdString());
     set_report(rep);
@@ -141,6 +117,7 @@ void SanitizerDialog::fix() {
             this, tr("Repaired"),
             tr("%1\n\nThe repaired file has been written back to disk.")
                 .arg(QString::fromStdString(rep.summary)));
+        emit file_changed(path_);
     } else if (!rep.file_ok) {
         QMessageBox::warning(this, tr("Could not repair"),
                              QString::fromStdString(rep.summary));

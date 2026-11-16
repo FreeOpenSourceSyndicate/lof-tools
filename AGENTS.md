@@ -31,13 +31,13 @@ cmake -S . -B build && cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-Qt6 is optional; without it only `lof-sanitize` and `lof-tests` are built.
+Qt6 is optional; without it only `lof-cli` and `lof-tests` are built.
 
 ## Task 1 (done): cheat-protection sanitizer
 
-Offers a dialog to open a save game or a `ROST` roster, checks whether the
-game's cheat protection would flag the file (or any character), and repairs it.
-Reusable parts live in `src/core` for the planned editors.
+Checks whether the game's cheat protection would flag the open file (or any
+character) and repairs it. Shown as the **Sanitizer** tab; the file is opened
+from the main window. Reusable parts live in `src/core` for the editors.
 
 ### The cheat protection (fully decoded, verified)
 
@@ -127,8 +127,12 @@ listed at the end of `docs/character-format.md`.
   Real game data (`game/`, `GAME*` archives, `*.EXE`) must **not** be committed.
 - Keep `src/core` free of Qt and of any GUI dependency so the planned editors
   and the CLI can both use it.
-- The GUI shell (`MainWindow`) owns the menu bar; add new tools as entries under
-  **Tools** rather than restructuring the window.
+- The GUI shell (`MainWindow`) owns the menu bar and a **tab per tool**
+  (`ToolPanel` subclasses: `SanitizerPanel`, `CharacterEditorPanel`). Opening a
+  file loads it into every tool at once; a tool that writes the file emits
+  `ToolPanel::file_changed` so the others refresh. **Add a new tool as a tab**,
+  not a new window. Keep the default window size within the screen and put large
+  forms in a `QScrollArea`.
 
 ## Next tasks
 
