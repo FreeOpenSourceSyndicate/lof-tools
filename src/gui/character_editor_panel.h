@@ -1,13 +1,12 @@
-#ifndef LOFTOOLS_GUI_CHARACTER_EDITOR_DIALOG_H
-#define LOFTOOLS_GUI_CHARACTER_EDITOR_DIALOG_H
+#ifndef LOFTOOLS_GUI_CHARACTER_EDITOR_PANEL_H
+#define LOFTOOLS_GUI_CHARACTER_EDITOR_PANEL_H
 
-#include <QDialog>
 #include <QString>
+#include <QWidget>
 #include <vector>
 
-#include <QWidget>
-
 #include "core/document.h"
+#include "gui/tool_panel.h"
 
 class QCheckBox;
 class QComboBox;
@@ -18,25 +17,21 @@ class QPushButton;
 class QSpinBox;
 class QStackedWidget;
 class QTableWidget;
-class QTabWidget;
 
 namespace loftools {
 
-// A form that reads/writes one Character.  The editor keeps one per slot in a
-// QStackedWidget; switching slots just changes the visible page.
+// The editable form for one Character.  It lives inside a scroll area, so it
+// works on small screens.
 class CharacterForm : public QWidget {
     Q_OBJECT
 
 public:
     explicit CharacterForm(QWidget* parent = nullptr);
 
-    // Copy the character's values into the widgets.
-    void load(const Character& c);
-    // Copy the widget values back into the character.
-    void apply(Character& c) const;
+    void load(const Character& c);   // copy character -> widgets
+    void apply(Character& c) const;  // copy widgets -> character
 
 signals:
-    // Emitted whenever any editor on the form changes (used for dirty state).
     void changed();
 
 private slots:
@@ -72,32 +67,31 @@ private:
     QTableWidget* inventory_ = nullptr;
     QTableWidget* spells_ = nullptr;
     QLabel* derived_ = nullptr;
-    bool loading_ = false;  // true while load() populates widgets
+    bool loading_ = false;
 };
 
-// The character editor: open a ROST roster or a save game, edit one character
-// at a time, and save the file back (with the integrity checksum recomputed).
-class CharacterEditorDialog : public QDialog {
+// Tab that edits a ROST roster or a save game one character at a time.  Saving
+// recomputes the integrity checksum, so the game's cheat protection accepts the
+// file.
+class CharacterEditorPanel : public ToolPanel {
     Q_OBJECT
 
 public:
-    explicit CharacterEditorDialog(QWidget* parent = nullptr);
+    explicit CharacterEditorPanel(QWidget* parent = nullptr);
 
-    // Load `path` and select it for editing.  Returns false on failure.
-    bool load(const QString& path);
-    // Ask the user for a file, then load it.
-    bool open_file_dialog();
+    QString tool_name() const override { return tr("Character editor"); }
+    bool load_file(const QString& path) override;
 
 private slots:
     void on_slot_changed(int index);
+    void on_open();
     void on_save();
     void on_save_as();
     void on_reload();
 
 private:
     void rebuild_forms();
-    void update_title();
-    // Write the visible forms back into the document (without saving to disk).
+    void update_header();
     void collect_edits();
 
     CharacterDocument doc_;
@@ -106,14 +100,14 @@ private:
 
     QListWidget* slots_ = nullptr;
     QStackedWidget* forms_ = nullptr;
-    QTabWidget* detail_tabs_ = nullptr;
     QPushButton* save_ = nullptr;
     QPushButton* save_as_ = nullptr;
     QLabel* header_ = nullptr;
+    QLabel* note_ = nullptr;
 
     std::vector<CharacterForm*> slot_forms_;
 };
 
 }  // namespace loftools
 
-#endif  // LOFTOOLS_GUI_CHARACTER_EDITOR_DIALOG_H
+#endif  // LOFTOOLS_GUI_CHARACTER_EDITOR_PANEL_H

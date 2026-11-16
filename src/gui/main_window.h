@@ -4,39 +4,47 @@
 #include <QMainWindow>
 #include <QString>
 
-class QLabel;
+class QStackedWidget;
+class QTabWidget;
 
 namespace loftools {
 
-class SanitizerDialog;
-class CharacterEditorDialog;
+class SanitizerPanel;
+class CharacterEditorPanel;
 
-// The application shell.  It owns the menu bar; the sanitizer lives in its own
-// dialog so that the future save-game / character editors can be added as
-// further menu entries without restructuring this window.
+// The application shell.  It owns the menu bar and one tab per tool; opening a
+// file loads it into every tool, so new tools are added as a tab rather than a
+// separate window.
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
-    // Load a file into the sanitizer and show it (used for a path given on the
-    // command line).
+    // Open `path` into every tool (File > Open, or a command-line path).
     void open_path(const QString& path);
 
-    // Open the character editor, optionally on a given path.
+    // Show the character-editor tab, optionally after loading `path`.
     void open_character_editor_path(const QString& path);
 
 private slots:
     void open_file();
-    void open_sanitizer();
-    void open_character_editor();
+    void reload_file();
+    void close_file();
+    void show_sanitizer();
+    void show_character_editor();
     void about();
 
 private:
-    SanitizerDialog* sanitizer_ = nullptr;
-    CharacterEditorDialog* char_editor_ = nullptr;
-    QLabel* hint_ = nullptr;
+    void build_tools();
+    void show_tools();
+
+    QStackedWidget* central_ = nullptr;
+    QWidget* welcome_ = nullptr;
+    QTabWidget* tabs_ = nullptr;
+    SanitizerPanel* sanitizer_ = nullptr;
+    CharacterEditorPanel* char_editor_ = nullptr;
+    QString path_;
     QString last_dir_;
 };
 

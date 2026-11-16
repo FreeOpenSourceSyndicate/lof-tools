@@ -1,10 +1,9 @@
-#include "gui/character_editor_dialog.h"
+#include "gui/character_editor_panel.h"
 
 #include <algorithm>
 
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
@@ -20,7 +19,6 @@
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QStackedWidget>
-#include <QTabWidget>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -39,7 +37,6 @@ QSpinBox* make_spin(int lo, int hi, QWidget* parent) {
     return s;
 }
 
-// One shared item dropdown model (index 0 = "(empty)", then the 185 items).
 void fill_item_combo(QComboBox* box) {
     box->addItem(QObject::tr("(empty)"), 0);
     for (size_t i = 0; i < kItemCount; ++i)
@@ -66,7 +63,6 @@ int combo_index_for_value(const QComboBox* box, int value) {
 CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
 
-    // --- identity + attributes + vitals + money, side by side --------------
     auto* top = new QHBoxLayout();
 
     auto* identity = new QGroupBox(tr("Identity"), this);
@@ -118,7 +114,7 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     vit_form->addRow(tr("Magic points (max)"), mp_max_);
     top->addWidget(vitals);
 
-    auto* money = new QGroupBox(tr("Money & Progress"), this);
+    auto* money = new QGroupBox(tr("Money && Progress"), this);
     auto* money_form = new QFormLayout(money);
     exp_ = make_spin(-2147483647, 2147483647, this);
     gold_ = make_spin(0, 2147483647, this);
@@ -132,7 +128,6 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
 
     root->addLayout(top);
 
-    // --- skills + languages ------------------------------------------------
     auto* mid = new QHBoxLayout();
 
     auto* skills = new QGroupBox(tr("Skills (%)"), this);
@@ -155,7 +150,6 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     }
     mid->addWidget(langs);
 
-    // --- inventory ---------------------------------------------------------
     inventory_ = new QTableWidget(char_off::kInventorySlots, 5, this);
     inventory_->setHorizontalHeaderLabels(
         {tr("#"), tr("Item"), tr("Equipped"), tr("Condition %"), tr("Charges")});
@@ -175,10 +169,8 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
         eq->setCheckState(Qt::Unchecked);
         inventory_->setItem((int)s, 2, eq);
 
-        auto* cond = make_spin(0, kSkillMax, inventory_);
-        inventory_->setCellWidget((int)s, 3, cond);
-        auto* chg = make_spin(0, 255, inventory_);
-        inventory_->setCellWidget((int)s, 4, chg);
+        inventory_->setCellWidget((int)s, 3, make_spin(0, kSkillMax, inventory_));
+        inventory_->setCellWidget((int)s, 4, make_spin(0, 255, inventory_));
     }
     inventory_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     inventory_->setMinimumHeight(180);
@@ -186,7 +178,6 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
 
     root->addLayout(mid, 1);
 
-    // --- spells ------------------------------------------------------------
     spells_ = new QTableWidget(char_off::kSpellSlots, 3, this);
     spells_->setHorizontalHeaderLabels({tr("#"), tr("Spell"), tr("Casts")});
     spells_->verticalHeader()->setVisible(false);
@@ -204,16 +195,15 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     spells_->setMaximumHeight(170);
     root->addWidget(spells_);
 
-    // --- derived / read-only info -----------------------------------------
     derived_ = new QLabel(this);
     derived_->setWordWrap(true);
     derived_->setTextFormat(Qt::RichText);
     root->addWidget(derived_);
 
-    // Any edit marks the form dirty; the dialog mirrors this into its title.
-    // on_any_change() suppresses the signal while load() is populating widgets.
-    for (QSpinBox* s : skills_) connect(s, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
-    for (QCheckBox* c : languages_) connect(c, &QCheckBox::toggled, this, &CharacterForm::on_any_change);
+    for (QSpinBox* s : skills_)
+        connect(s, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
+    for (QCheckBox* c : languages_)
+        connect(c, &QCheckBox::toggled, this, &CharacterForm::on_any_change);
     connect(name_, &QLineEdit::textChanged, this, &CharacterForm::on_any_change);
     connect(level_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(str_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
@@ -231,8 +221,10 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     connect(rations_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(sex_, &QComboBox::currentIndexChanged, this, &CharacterForm::on_any_change);
     connect(race_, &QComboBox::currentIndexChanged, this, &CharacterForm::on_any_change);
-    connect(profession_, &QComboBox::currentIndexChanged, this, &CharacterForm::on_any_change);
-    connect(alignment_, &QComboBox::currentIndexChanged, this, &CharacterForm::on_any_change);
+    connect(profession_, &QComboBox::currentIndexChanged, this,
+            &CharacterForm::on_any_change);
+    connect(alignment_, &QComboBox::currentIndexChanged, this,
+            &CharacterForm::on_any_change);
 }
 
 void CharacterForm::on_any_change() {
@@ -287,7 +279,6 @@ void CharacterForm::load(const Character& c) {
         qobject_cast<QSpinBox*>(spells_->cellWidget((int)s, 2))->setValue(sp.casts);
     }
 
-    // Read-only derived / diagnostic line.
     derived_->setText(
         tr("<b>Read-only (recomputed by the engine):</b> defence %1, "
            "weight %2/%3 (shown /10), inventory slots used %4, spells %5. "
@@ -331,9 +322,6 @@ void CharacterForm::apply(Character& c) const {
     for (size_t i = 0; i < languages_.size(); ++i)
         c.set_language(i, languages_[i]->isChecked());
 
-    // Inventory: write every slot, then set the used-slot count to the number
-    // of non-empty slots so the engine's inventory loops see a consistent view.
-    uint8_t used = 0;
     for (size_t s = 0; s < char_off::kInventorySlots; ++s) {
         InvSlot slot;
         auto* combo = qobject_cast<QComboBox*>(inventory_->cellWidget((int)s, 1));
@@ -346,19 +334,17 @@ void CharacterForm::apply(Character& c) const {
         slot.charges =
             (uint8_t)qobject_cast<QSpinBox*>(inventory_->cellWidget((int)s, 4))
                 ->value();
-        if (slot.item != 0 && used == s) ++used;
         c.set_inventory(s, slot);
     }
-    // Count leading non-empty slots (the engine scans for the first empty one).
-    used = 0;
+    // The engine scans for the first empty slot, so the count is the leading
+    // run of non-empty slots.
+    uint8_t used = 0;
     for (size_t s = 0; s < char_off::kInventorySlots; ++s) {
         if (c.inventory(s).item == 0) break;
         ++used;
     }
     c.set_byte(char_off::kInvUsed, used);
 
-    // Spells: rewrite the array, then set the count to the leading run of
-    // non-empty spell slots.
     for (size_t s = 0; s < char_off::kSpellSlots; ++s) {
         auto* combo = qobject_cast<QComboBox*>(spells_->cellWidget((int)s, 1));
         uint8_t id = (uint8_t)combo->currentData().toInt();
@@ -376,13 +362,10 @@ void CharacterForm::apply(Character& c) const {
 }
 
 // ---------------------------------------------------------------------------
-// CharacterEditorDialog
+// CharacterEditorPanel
 // ---------------------------------------------------------------------------
 
-CharacterEditorDialog::CharacterEditorDialog(QWidget* parent) : QDialog(parent) {
-    setWindowTitle(tr("Character editor"));
-    resize(900, 720);
-
+CharacterEditorPanel::CharacterEditorPanel(QWidget* parent) : ToolPanel(parent) {
     auto* root = new QVBoxLayout(this);
 
     header_ = new QLabel(this);
@@ -394,61 +377,69 @@ CharacterEditorDialog::CharacterEditorDialog(QWidget* parent) : QDialog(parent) 
     slots_ = new QListWidget(this);
     slots_->setMaximumWidth(220);
     connect(slots_, &QListWidget::currentRowChanged, this,
-            &CharacterEditorDialog::on_slot_changed);
+            &CharacterEditorPanel::on_slot_changed);
     body->addWidget(slots_);
 
-    forms_ = new QStackedWidget(this);
-    body->addWidget(forms_, 1);
+    // The form lives in a scroll area so the tab works on small screens.
+    auto* scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    forms_ = new QStackedWidget(scroll);
+    scroll->setWidget(forms_);
+    body->addWidget(scroll, 1);
 
     root->addLayout(body, 1);
 
-    auto* note = new QLabel(this);
-    note->setWordWrap(true);
-    note->setText(tr(
+    note_ = new QLabel(this);
+    note_->setWordWrap(true);
+    note_->setText(tr(
         "Editing a field is safe: the integrity checksum is recomputed when you "
-        "save, so the game's cheat protection will not flag the file. Fields "
-        "marked read-only are recomputed by the engine."));
-    root->addWidget(note);
+        "save, so the game's cheat protection will not flag the file."));
+    root->addWidget(note_);
 
-    auto* buttons = new QDialogButtonBox(this);
-    save_ = buttons->addButton(tr("Save"), QDialogButtonBox::AcceptRole);
-    save_as_ = buttons->addButton(tr("Save as..."), QDialogButtonBox::ActionRole);
-    auto* reload = buttons->addButton(tr("Reload"), QDialogButtonBox::ResetRole);
-    buttons->addButton(QDialogButtonBox::Close);
-    connect(save_, &QPushButton::clicked, this, &CharacterEditorDialog::on_save);
-    connect(save_as_, &QPushButton::clicked, this, &CharacterEditorDialog::on_save_as);
-    connect(reload, &QPushButton::clicked, this, &CharacterEditorDialog::on_reload);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    root->addWidget(buttons);
+    auto* buttons = new QHBoxLayout();
+    auto* open = new QPushButton(tr("Open file..."), this);
+    save_ = new QPushButton(tr("Save"), this);
+    save_as_ = new QPushButton(tr("Save as..."), this);
+    auto* reload = new QPushButton(tr("Reload"), this);
+    buttons->addWidget(open);
+    buttons->addStretch(1);
+    buttons->addWidget(reload);
+    buttons->addWidget(save_as_);
+    buttons->addWidget(save_);
+    root->addLayout(buttons);
 
-    update_title();
+    connect(open, &QPushButton::clicked, this, &CharacterEditorPanel::on_open);
+    connect(save_, &QPushButton::clicked, this, &CharacterEditorPanel::on_save);
+    connect(save_as_, &QPushButton::clicked, this, &CharacterEditorPanel::on_save_as);
+    connect(reload, &QPushButton::clicked, this, &CharacterEditorPanel::on_reload);
+
+    update_header();
 }
 
-bool CharacterEditorDialog::load(const QString& path) {
+bool CharacterEditorPanel::load_file(const QString& path) {
     doc_ = CharacterDocument::load(path.toLocal8Bit().constData());
-    if (!doc_.ok()) {
-        QMessageBox::warning(this, tr("Cannot open file"),
-                             tr("Could not read %1 as a ROST roster or a save "
-                                "game:\n%2")
-                                 .arg(path, QString::fromStdString(doc_.error())));
-        return false;
-    }
     path_ = path;
     dirty_ = false;
+    if (!doc_.ok()) {
+        rebuild_forms();
+        update_header();
+        return false;
+    }
     rebuild_forms();
-    update_title();
+    update_header();
     return true;
 }
 
-bool CharacterEditorDialog::open_file_dialog() {
+void CharacterEditorPanel::on_open() {
     const QString path = QFileDialog::getOpenFileName(
         this, tr("Open ROST or save game"), QFileInfo(path_).absolutePath(),
         tr("ROST / save game (ROST* GAME* *.SAV);;All files (*)"));
-    if (path.isEmpty()) return false;
-    return load(path);
+    if (path.isEmpty()) return;
+    load_file(path);
+    if (doc_.ok()) emit file_changed(path);
 }
 
-void CharacterEditorDialog::rebuild_forms() {
+void CharacterEditorPanel::rebuild_forms() {
     slots_->clear();
     while (forms_->count() > 0) {
         QWidget* w = forms_->widget(0);
@@ -472,7 +463,7 @@ void CharacterEditorDialog::rebuild_forms() {
         connect(form, &CharacterForm::changed, this, [this]() {
             if (!dirty_) {
                 dirty_ = true;
-                update_title();
+                update_header();
             }
         });
         forms_->addWidget(form);
@@ -484,25 +475,19 @@ void CharacterEditorDialog::rebuild_forms() {
     }
 }
 
-void CharacterEditorDialog::on_slot_changed(int index) {
-    // Persist the form we are leaving before switching pages.
+void CharacterEditorPanel::on_slot_changed(int index) {
     collect_edits();
     if (index >= 0 && index < (int)forms_->count()) forms_->setCurrentIndex(index);
-    // Refresh the (possibly recomputed) derived info of the shown page.
-    if (index >= 0 && index < (int)slot_forms_.size()) {
-        const Character* c = doc_.character((size_t)index);
-        if (c) slot_forms_[(size_t)index]->load(*c);
-    }
 }
 
-void CharacterEditorDialog::collect_edits() {
+void CharacterEditorPanel::collect_edits() {
     for (size_t i = 0; i < slot_forms_.size(); ++i) {
         Character* c = doc_.character(i);
         if (c) slot_forms_[i]->apply(*c);
     }
 }
 
-void CharacterEditorDialog::on_save() {
+void CharacterEditorPanel::on_save() {
     collect_edits();
     if (!doc_.save()) {
         QMessageBox::warning(this, tr("Save failed"),
@@ -510,21 +495,20 @@ void CharacterEditorDialog::on_save() {
         return;
     }
     dirty_ = false;
-    // Reload from the just-written bytes so the view reflects what is on disk.
     rebuild_forms();
-    update_title();
+    update_header();
     QMessageBox::information(
         this, tr("Saved"),
         tr("Wrote %1.\nThe integrity checksums were recomputed, so the game's "
            "cheat protection will accept the file.")
             .arg(path_));
+    emit file_changed(path_);
 }
 
-void CharacterEditorDialog::on_save_as() {
+void CharacterEditorPanel::on_save_as() {
     collect_edits();
     const QString path = QFileDialog::getSaveFileName(
-        this, tr("Save as"), path_,
-        tr("ROST / save game (*);;All files (*)"));
+        this, tr("Save as"), path_, tr("ROST / save game (*);;All files (*)"));
     if (path.isEmpty()) return;
     if (!doc_.save(path.toLocal8Bit().constData())) {
         QMessageBox::warning(this, tr("Save failed"),
@@ -534,29 +518,34 @@ void CharacterEditorDialog::on_save_as() {
     path_ = path;
     dirty_ = false;
     rebuild_forms();
-    update_title();
+    update_header();
     QMessageBox::information(this, tr("Saved"),
                              tr("Wrote %1 with recomputed checksums.").arg(path_));
+    emit file_changed(path_);
 }
 
-void CharacterEditorDialog::on_reload() {
-    if (!path_.isEmpty()) load(path_);
+void CharacterEditorPanel::on_reload() {
+    if (!path_.isEmpty()) load_file(path_);
 }
 
-void CharacterEditorDialog::update_title() {
-    QString kind = doc_.kind() == DocKind::SaveGame ? tr("save game")
-                                                     : tr("ROST roster");
-    if (header_) {
-        header_->setText(tr("<b>%1</b> - %2 character(s). %3")
-                             .arg(path_.isEmpty() ? tr("(no file)") : path_)
-                             .arg(doc_.character_count())
-                             .arg(doc_.kind() == DocKind::None
-                                      ? tr("Open a file to begin.")
-                                      : tr("Edit a character, then Save.")));
+void CharacterEditorPanel::update_header() {
+    const bool loaded = doc_.ok();
+    save_->setEnabled(loaded);
+    save_as_->setEnabled(loaded);
+
+    if (!loaded) {
+        header_->setText(tr("<b>No file loaded.</b> Use File > Open, or the "
+                            "Open file button below."));
+        note_->setVisible(true);
+        return;
     }
-    setWindowTitle(tr("Character editor%1 - %2")
-                       .arg(dirty_ ? "*" : "")
-                       .arg(path_.isEmpty() ? kind : QFileInfo(path_).fileName()));
+    const QString kind = doc_.kind() == DocKind::SaveGame ? tr("save game")
+                                                          : tr("ROST roster");
+    header_->setText(tr("<b>%1</b> - %2 (%3 character(s)).%4")
+                         .arg(path_, kind)
+                         .arg(doc_.character_count())
+                         .arg(dirty_ ? tr("  Unsaved changes.") : QString()));
+    note_->setVisible(true);
 }
 
 }  // namespace loftools
