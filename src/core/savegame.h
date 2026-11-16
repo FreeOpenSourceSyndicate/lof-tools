@@ -42,6 +42,10 @@ constexpr size_t kSaveLocTens = 0x9a4;  // byte  tens digit of the dungeon id
 constexpr size_t kSaveFacing  = 0x9a6;  // byte  party facing (0=N .. 3=W)
 constexpr uint8_t kSaveFacingInvalid = 0xff;
 
+// The largest dungeon id the engine can address: it composes the map name as
+// `DNGS\DNG%01d%01d` from the two digit bytes, so each is 0..9.
+constexpr uint16_t kSaveLocationMax = 99;
+
 struct SaveGame {
     bool ok = false;          // header magic and size are sane
     std::string error;        // human-readable reason when !ok
@@ -69,6 +73,15 @@ struct SaveGame {
     uint16_t location() const {
         return (uint16_t)(loc_tens * 10 + loc_ones);
     }
+
+    // Write the party's location back into `raw` as the two digit bytes the
+    // engine composes the map name from.  `location` must be 0..kSaveLocationMax
+    // (each digit 0..9); out-of-range values are clamped so the file stays
+    // loadable.  Does not touch the checksum - call recompute() (or save via the
+    // document) afterwards.
+    void set_location(uint16_t location);
+    // Write the facing digit (0=N..3=W) back into `raw`; clamps to 0..3.
+    void set_facing(uint8_t facing);
 };
 
 // Parse a save image held in memory.  Never throws; sets ok=false + error on
@@ -77,6 +90,10 @@ SaveGame parse_save(const std::vector<uint8_t>& file);
 
 // Serialize back to a byte image (updates the checksum trailer from raw).
 std::vector<uint8_t> serialize_save(const SaveGame& save);
+
+// The engine builds the dungeon map name as `DNGS\DNG%01d%01d` from the two
+// digit bytes (asm 0x4bb35).  Returns "" for a location above kSaveLocationMax.
+std::string dungeon_map_name(uint16_t location);
 
 }  // namespace loftools
 

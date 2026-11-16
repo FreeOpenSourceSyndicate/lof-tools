@@ -34,6 +34,13 @@ constexpr size_t kAlignmentCount = 2;
 constexpr size_t kSkillCount = 9;
 constexpr size_t kLanguageCount = 8;
 
+// Save-game status tables.  The party's location indexes the scenario titles
+// (the engine's status box shows the region the location belongs to); the
+// facing digit indexes the compass heading.  Transcribed from the lof2 project
+// (port/char_names.inc), cross-checked against the shipped saves.
+constexpr size_t kScenarioCount = 8;
+constexpr size_t kFacingCount = 4;
+
 // 1-based item lookup as stored in an inventory slot (0 = empty slot).  Returns
 // nullptr when `index1based` is out of range.
 const ItemInfo* item_by_index(int index1based);
@@ -50,6 +57,12 @@ const char* profession_name(uint8_t index);   // 0 Warrior .. 11 Monk
 const char* alignment_name(uint8_t index);    // 0 Lawful, 1 Chaotic
 const char* skill_name(size_t index);         // 0 .. 8
 const char* language_name(size_t index);      // 0 .. 7
+
+// Scenario title for a party location (the ones digit indexes this table), and
+// the compass heading for a facing digit.  Out-of-range values return a
+// descriptive placeholder.
+const char* scenario_name(uint8_t index);     // 0 .. 7
+const char* facing_name(uint8_t index);       // 0 North .. 3 West
 
 }  // namespace loftools
 

@@ -79,6 +79,22 @@ std::string CharacterDocument::slot_label(size_t index) const {
     return std::to_string(index + 1);
 }
 
+uint16_t CharacterDocument::save_location() const {
+    return kind_ == DocKind::SaveGame ? save_.location() : 0;
+}
+
+void CharacterDocument::set_save_location(uint16_t location) {
+    if (kind_ == DocKind::SaveGame) save_.set_location(location);
+}
+
+uint8_t CharacterDocument::save_facing() const {
+    return kind_ == DocKind::SaveGame ? save_.facing : kSaveFacingInvalid;
+}
+
+void CharacterDocument::set_save_facing(uint8_t facing) {
+    if (kind_ == DocKind::SaveGame) save_.set_facing(facing);
+}
+
 std::vector<uint8_t> CharacterDocument::serialize() const {
     switch (kind_) {
         case DocKind::Roster: {

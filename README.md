@@ -101,6 +101,12 @@ tools appear as new tabs):
   allows, so narrowing the window adds rows instead of a horizontal scrollbar.
   A horizontal scrollbar only appears if a single group no longer fits on a row
   of its own.
+- **Save game editor** - edits the non-character state of a save game: the party
+  roster (which slots are in use) and the party's position - the dungeon id the
+  engine loads (`DNGS\DNGnn`) and the compass facing. Double-clicking a party
+  member jumps to that slot in the character editor. Saving recomputes the
+  checksum. (A `ROST` roster has no such state, so the tab explains that when a
+  roster is open.)
 
 The file is always opened from the menu bar (**File > Open**); the tabs have no
 separate Open button, since a single open feeds every tab.
@@ -126,6 +132,9 @@ displays.
 
 # Print every decoded character field (read-only):
 ./build/lof-cli dump ROST/ROST
+
+# Print a save game's state: party, location, facing (read-only):
+./build/lof-cli state GAMES/GAME1
 ```
 
 ## Tests

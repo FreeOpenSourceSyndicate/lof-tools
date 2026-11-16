@@ -82,6 +82,10 @@ public:
     QString tool_name() const override { return tr("Character editor"); }
     bool load_file(const QString& path) override;
 
+    // Show the form for `index` (0-based); ignored when out of range.  Used when
+    // another tool (e.g. the save-game editor) wants to jump to a member.
+    void select_slot(int index);
+
 private slots:
     void on_slot_changed(int index);
     void on_save();
