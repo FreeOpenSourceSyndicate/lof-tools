@@ -7,10 +7,13 @@
 #include <vector>
 
 #include "core/checksum.h"
+#include "core/character.h"
+#include "core/document.h"
 #include "core/file_io.h"
 #include "core/rost.h"
 #include "core/sanitizer.h"
 #include "core/savegame.h"
+#include "core/tables.h"
 
 using namespace loftools;
 
@@ -169,6 +172,209 @@ static void test_end_to_end(const std::string& dir) {
     std::remove(tmp.c_str());
 }
 
+// Every value the user supplied for the uploaded roster, asserted field by
+// field.  This is the ground truth for the character editor: if any of these
+// fails, a decoded offset is wrong.
+static void test_character_fields(const std::string& dir) {
+    CharacterDocument doc = CharacterDocument::load(dir + "/ROST.user");
+    CHECK(doc.ok());
+    CHECK(doc.kind() == DocKind::Roster);
+    CHECK(doc.character_count() == 7);
+
+    const char* names[7] = {"Siegurd", "Conan", "Tuck", "Lara", "Laladil",
+                            "Mirakulix", "Morgana"};
+    for (size_t i = 0; i < 7; ++i) {
+        const Character* c = doc.character(i);
+        CHECK(c != nullptr);
+        CHECK(c->name() == names[i]);
+    }
+
+    // Index 0 is the un-rolled template: rank/attributes unset, HP seeded.
+    const Character* s = doc.character(0);
+    CHECK(s->hp_max() == 88 && s->hp_cur() == 88);
+    CHECK(s->rations() == 4 && s->gold() == 4 && s->deposit() == 0);
+    CHECK(s->str() == 0);
+
+    // Conan (index 1): chaotic human barbarian.
+    const Character* conan = doc.character(1);
+    CHECK(conan->level() == 1);
+    CHECK(conan->sex() == 1);          // male
+    CHECK(conan->alignment() == 1);    // chaotic
+    CHECK(conan->race() == 0);         // Human
+    CHECK(conan->profession() == 1);   // Barbarian
+    CHECK(conan->str() == 19 && conan->con() == 18 && conan->dex() == 17);
+    CHECK(conan->intel() == 16 && conan->wis() == 10);
+    CHECK(conan->hp_cur() == 16 && conan->hp_max() == 17);
+    CHECK(conan->mp_cur() == 0 && conan->mp_max() == 0);
+    CHECK(conan->experience() == 129);
+    CHECK(conan->weight_max() == 5100 && conan->weight_cur() == 1059);
+    CHECK(conan->rations() == 14);
+    CHECK(conan->gold() == 3);
+    CHECK(conan->deposit() == 8388318);
+
+    // Tuck (index 2): lawful Human monk.
+    const Character* tuck = doc.character(2);
+    CHECK(tuck->level() == 1);
+    CHECK(tuck->sex() == 1);
+    CHECK(tuck->alignment() == 0);     // lawful
+    CHECK(tuck->race() == 0);          // Human
+    CHECK(tuck->profession() == 11);   // Monk
+    CHECK(tuck->str() == 19 && tuck->con() == 19 && tuck->dex() == 19);
+    CHECK(tuck->hp_cur() == 16 && tuck->hp_max() == 16);
+    CHECK(tuck->experience() == 28);
+    CHECK(tuck->deposit() == 8388629);
+
+    // Lara (index 3): lawful dwarven priestess, level 6, negative experience.
+    const Character* lara = doc.character(3);
+    CHECK(lara->level() == 6);
+    CHECK(lara->sex() == 0);           // female
+    CHECK(lara->alignment() == 0);     // lawful
+    CHECK(lara->race() == 4);          // Dwarf
+    CHECK(lara->profession() == 5);    // Priest
+    CHECK(lara->hp_cur() == 39 && lara->hp_max() == 39);
+    CHECK(lara->mp_cur() == 10 && lara->mp_max() == 12);
+    CHECK(lara->experience() == -4746);
+    CHECK(lara->deposit() == 8382582);
+
+    // Laladil (index 4): chaotic half-elven female paladin.
+    const Character* laladil = doc.character(4);
+    CHECK(laladil->level() == 1);
+    CHECK(laladil->sex() == 0);
+    CHECK(laladil->alignment() == 1);
+    CHECK(laladil->race() == 1);       // Half-Elf
+    CHECK(laladil->profession() == 9); // Paladin
+    CHECK(laladil->str() == 17 && laladil->con() == 17 && laladil->dex() == 14);
+    CHECK(laladil->intel() == 13 && laladil->wis() == 16);
+    CHECK(laladil->experience() == 0);
+    CHECK(laladil->gold() == 26);
+    CHECK(laladil->deposit() == 0);
+    CHECK(laladil->rations() == 3);
+
+    // Mirakulix (index 5): lawful Human druid.
+    const Character* mira = doc.character(5);
+    CHECK(mira->level() == 1);
+    CHECK(mira->sex() == 1);
+    CHECK(mira->alignment() == 0);
+    CHECK(mira->race() == 0);
+    CHECK(mira->profession() == 6);    // Druid
+    CHECK(mira->hp_cur() == 16 && mira->hp_max() == 16);
+    CHECK(mira->mp_cur() == 1 && mira->mp_max() == 1);
+    CHECK(mira->experience() == 87);
+    CHECK(mira->deposit() == 8388807);
+
+    // Morgana (index 6): lawful elven female magician.
+    const Character* morgana = doc.character(6);
+    CHECK(morgana->level() == 1);
+    CHECK(morgana->sex() == 0);
+    CHECK(morgana->alignment() == 0);
+    CHECK(morgana->race() == 2);       // Elf
+    CHECK(morgana->profession() == 7); // Magician
+    CHECK(morgana->mp_cur() == 3 && morgana->mp_max() == 3);
+    CHECK(morgana->experience() == 164);
+    CHECK(morgana->deposit() == 8388649);
+
+    // Skills: Conan / Lara, in the engine's display order.
+    CHECK(conan->skill(0) == 10 && conan->skill(1) == 8 && conan->skill(2) == 7);
+    CHECK(conan->skill(3) == 34 && conan->skill(4) == 0 && conan->skill(5) == 0);
+    CHECK(conan->skill(6) == 7 && conan->skill(7) == 5 && conan->skill(8) == 0);
+    CHECK(lara->skill(0) == 20 && lara->skill(1) == 5 && lara->skill(2) == 6);
+    CHECK(lara->skill(3) == 72 && lara->skill(4) == 10 && lara->skill(5) == 10);
+    CHECK(lara->skill(6) == 15 && lara->skill(7) == 15 && lara->skill(8) == 10);
+
+    // Languages: Lara knows all eight, Conan Common+Animal, Tuck Common only.
+    for (size_t l = 0; l < 8; ++l) CHECK(lara->knows_language(l));
+    CHECK(conan->knows_language(0) && conan->knows_language(1));
+    CHECK(!conan->knows_language(2));
+    CHECK(tuck->knows_language(0) && !tuck->knows_language(1));
+    CHECK(laladil->knows_language(0) && laladil->knows_language(5));
+
+    // Inventory: Conan's three equipped items (Ring mail, Large shield,
+    // Barbarian axe) and their condition / equipped flags.
+    CHECK(conan->inv_used() == 3);
+    InvSlot s0 = conan->inventory(0);
+    CHECK(s0.item == 31 && s0.equipped == 1 && s0.condition == 100);  // Ring mail
+    InvSlot s1 = conan->inventory(1);
+    CHECK(s1.item == 35 && s1.equipped == 1 && s1.condition == 100);  // Large shield
+    InvSlot s2 = conan->inventory(2);
+    CHECK(s2.item == 45 && s2.equipped == 1 && s2.condition == 96);   // Barbarian axe
+    CHECK(tuck->inv_used() == 3);
+    CHECK(tuck->inventory(2).item == 42 && tuck->inventory(2).equipped == 0);  // Thieves' picks
+
+    // Spells: Lara has eight, in the file's order.
+    CHECK(lara->spell_count() == 8);
+    CHECK(lara->spell(0).id == 80 && lara->spell(0).casts == 9);   // Healing I
+    CHECK(lara->spell(1).id == 81 && lara->spell(1).casts == 8);   // Light
+    CHECK(lara->spell(2).id == 82 && lara->spell(2).casts == 8);   // Fear evil
+    CHECK(lara->spell(3).id == 83 && lara->spell(3).casts == 7);   // Blessing
+    CHECK(lara->spell(4).id == 84 && lara->spell(4).casts == 7);   // Fear undead
+    CHECK(lara->spell(5).id == 85 && lara->spell(5).casts == 4);   // Mental hammer
+    CHECK(lara->spell(6).id == 86 && lara->spell(6).casts == 6);   // Singing
+    CHECK(lara->spell(7).id == 87 && lara->spell(7).casts == 6);   // Bind persons
+    CHECK(mira->spell_count() == 1 && mira->spell(0).id == 59);    // Glow
+    CHECK(morgana->spell_count() == 2);
+    CHECK(morgana->spell(0).id == 1 && morgana->spell(1).id == 2); // Burning hands, Light
+}
+
+// Editing a field through the document and saving must refresh the checksum so
+// the game's cheat protection stays happy.
+static void test_character_edit_roundtrip(const std::string& dir) {
+    CharacterDocument doc = CharacterDocument::load(dir + "/ROST.user");
+    CHECK(doc.ok());
+
+    Character* conan = doc.character(1);
+    CHECK(conan != nullptr);
+    conan->set_str(18);
+    conan->set_gold(1234);
+    conan->set_experience(99999);
+    conan->set_skill(0, 55);
+
+    const std::vector<uint8_t> out = doc.serialize();
+    RostFile rost = parse_rost(out);
+    CHECK(rost.ok);
+    CHECK(rost.all_intact());  // every recomputed trailer matches
+    CHECK(rost.records[1].character.str() == 18);
+    CHECK(rost.records[1].character.gold() == 1234);
+    CHECK(rost.records[1].character.experience() == 99999);
+    CHECK(rost.records[1].character.skill(0) == 55);
+    // Untouched characters keep their original checksums.
+    CHECK(rost.records[0].name() == "Siegurd");
+    CHECK(rost.records[6].character.deposit() == 8388649);
+
+    // The sanitizer must now consider the edited image clean.
+    const std::string tmp = "/tmp/lof_tools_test_edit_rost.bin";
+    CHECK(write_file(tmp, out));
+    SanitizeReport rep = inspect(tmp);
+    CHECK(rep.file_ok && !rep.flagged);
+    std::remove(tmp.c_str());
+}
+
+// The name tables the editor relies on.
+static void test_tables() {
+    CHECK(kItemCount == 185);
+    CHECK(kSpellCount == 141);
+    CHECK(std::string(item_by_index(31)->name) == "Ring mail");
+    CHECK(std::string(item_by_index(35)->name) == "Large shield");
+    CHECK(std::string(item_by_index(45)->name) == "Barbarian axe");
+    CHECK(std::string(item_by_index(42)->name) == "Thieves' picks");
+    CHECK(std::string(item_by_index(120)->name) == "The Amulet");
+    CHECK(item_by_index(0) == nullptr);
+    CHECK(item_by_index(186) == nullptr);
+    CHECK(std::string(spell_name(80)) == "Healing I");
+    CHECK(std::string(spell_name(82)) == "Fear evil");
+    CHECK(std::string(spell_name(59)) == "Glow");
+    CHECK(std::string(spell_name(1)) == "Burning hands");
+    CHECK(std::string(spell_name(0)).empty());
+    CHECK(std::string(profession_name(1)) == "Barbarian");
+    CHECK(std::string(profession_name(11)) == "Monk");
+    CHECK(std::string(race_name(4)) == "Dwarf");
+    CHECK(std::string(alignment_name(1)) == "Chaotic");
+    CHECK(std::string(sex_name(0)) == "Female");
+    // Every advertised field is at least "Likely", i.e. the editor may show it.
+    for (const FieldInfo& f : character_fields()) {
+        CHECK(f.confidence != FieldConfidence::Uncertain);
+    }
+}
+
 int main(int argc, char** argv) {
     const std::string dir = data_dir(argc, argv);
     test_rost_fixture(dir);
@@ -177,6 +383,9 @@ int main(int argc, char** argv) {
     test_save_repair(dir);
     test_detect(dir);
     test_end_to_end(dir);
+    test_character_fields(dir);
+    test_character_edit_roundtrip(dir);
+    test_tables();
 
     std::printf("%d checks, %d failure(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

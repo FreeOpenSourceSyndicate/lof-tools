@@ -18,8 +18,8 @@ Deliverable so far:
 
 | Binary              | Source | Purpose |
 |---------------------|--------|---------|
-| `lof-tools`         | `src/gui`   | Qt6 GUI (menu shell + sanitizer dialog) |
-| `lof-sanitize`      | `src/cli`   | headless sanitizer |
+| `lof-tools`         | `src/gui`   | Qt6 GUI (menu shell + sanitizer + character editor) |
+| `lof-cli`           | `src/cli`   | headless sanitizer + character dump |
 | `lof-tests`         | `tests`     | unit tests over `testdata/` |
 | `lofcore` (static)  | `src/core`  | reusable data model + cheat-protection logic |
 
@@ -80,8 +80,12 @@ are asserted in `tests/test_core.cpp`.
 
 ## Character struct offsets (410 bytes)
 
-Grounded in lof2's `docs/notes-b.md` and cross-checked against the fixtures.
-See `src/core/character.h` (`char_off`) for the full list. Key ones:
+Fully decoded and verified: every field below reproduced the maintainer's
+hand-made character sheet byte-for-byte for seven characters (Siegurd, Conan,
+Tuck, Lara, Laladil, Mirakulix, Morgana) and cross-checks against the shipped
+saves. The authoritative, complete map is
+[`docs/character-format.md`](docs/character-format.md); the code of record is
+`src/core/character.h` (`char_off`). Key fields:
 
 | off | size | meaning |
 |----:|-----:|---------|
@@ -89,16 +93,28 @@ See `src/core/character.h` (`char_off`) for the full list. Key ones:
 | 0x01 | 14 | NUL-terminated name |
 | 0x0C | byte | tamper flag (`0xFC` = engine thinks this char is edited) |
 | 0x17 | byte | level / rank |
+| 0x18 | byte | sex (0 female, 1 male) — lof2 wrongly calls this "class flag" |
+| 0x19 | byte | alignment (0 lawful, 1 chaotic) |
+| 0x1a | byte | race (0 Human .. 5 Half-Orc) |
 | 0x1b | byte | profession index (0..11; 0xff/0x0c = none) |
-| 0x1e | byte | total defence / armour class |
+| 0x1e | byte | total defence / armour class (engine-recomputed; read-only) |
 | 0x20/0x22 | word | max / current HP |
+| 0x25/0x27/0x28/0x2b/0x2d/0x30/0x32/0x34/0x36 | bytes | the nine skills, in the sheet builder's read order (Negotiating, Attack, Defence, Concentration, Pick-pocketing, Stalking, Trap detecting, Trap disarming, Lock picking) |
 | 0x44..0x48 | bytes | Con, Str, Dex, Int, Wis |
-| 0x64/0x66 | word | max / current carried weight |
+| 0x64/0x66 | word | max / current carried weight (shown /10) |
 | 0x68/0x69 | byte | max / current MP |
+| 0x6a | byte | learned-spell count |
 | 0x6b | byte | used inventory-slot count |
-| 0x6c | dword | experience |
+| 0x6c | dword | experience (signed) |
 | 0x70 | byte | rations |
-| 0x72 | dword | gold |
+| 0x72 | dword | gold (purse) |
+| 0x76 | dword | gold (deposit / bank) — not in lof2 |
+| 0x7a | 8 bytes | language flags (one per language) |
+| 0x82 | 192 | 48 inventory slots x 4 bytes (item, equipped, charges, condition) |
+| 0x142 | 40 | 20 spell slots x 2 bytes (spell index, casts) |
+
+Fields we are **not** yet sure about (deliberately left out of the editor) are
+listed at the end of `docs/character-format.md`.
 
 ## Conventions / hygiene
 
@@ -116,8 +132,12 @@ See `src/core/character.h` (`char_off`) for the full list. Key ones:
 
 ## Next tasks
 
-- **Save-game editor** (planned): reuse `src/core/savegame.*` and
-  `src/core/character.*`; add a `Tools` menu entry and a dialog.
-- **Character editor** (planned): reuse `src/core/character.*`; works on both a
-  save's party and a ROST record. After any edit, refresh the checksum so the
-  sanitizer is a no-op.
+- **Save-game editor** (planned): reuse `src/core/document.h`
+  (`CharacterDocument`), `src/core/savegame.*` and `src/core/character.*`; add a
+  `Tools` menu entry and a dialog. The character editor already works on a save's
+  party, so a save editor mainly needs to expose the non-character game state
+  (location, map, gold-in-bank, etc.).
+- The character editor and the `lof-cli dump` command share the same model; keep
+  both in sync when new fields are confirmed.
+- When new characters (other classes/races) or shop item orders arrive from the
+  maintainer, extend `testdata/` and the assertions in `tests/test_core.cpp`.

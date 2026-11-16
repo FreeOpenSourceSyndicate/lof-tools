@@ -11,6 +11,7 @@
 #include <QWidget>
 
 #include "core/sanitizer.h"
+#include "gui/character_editor_dialog.h"
 #include "gui/sanitizer_dialog.h"
 
 namespace loftools {
@@ -39,9 +40,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     QAction* save_editor = tools->addAction(tr("Save game editor..."));
     save_editor->setEnabled(false);
     save_editor->setToolTip(tr("Planned"));
-    QAction* char_editor = tools->addAction(tr("Character editor..."));
-    char_editor->setEnabled(false);
-    char_editor->setToolTip(tr("Planned"));
+    QAction* char_editor = tools->addAction(tr("&Character editor..."));
+    connect(char_editor, &QAction::triggered, this,
+            &MainWindow::open_character_editor);
 
     // --- Help menu --------------------------------------------------------
     QMenu* help = menuBar()->addMenu(tr("&Help"));
@@ -83,6 +84,25 @@ void MainWindow::open_sanitizer() {
     sanitizer_->show();
     sanitizer_->raise();
     sanitizer_->activateWindow();
+}
+
+void MainWindow::open_character_editor() {
+    if (!char_editor_) char_editor_ = new CharacterEditorDialog(this);
+    // Offer a file straight away when none is loaded yet.
+    if (char_editor_->isHidden() && last_dir_.isEmpty()) {
+        char_editor_->open_file_dialog();
+    }
+    char_editor_->show();
+    char_editor_->raise();
+    char_editor_->activateWindow();
+}
+
+void MainWindow::open_character_editor_path(const QString& path) {
+    if (!char_editor_) char_editor_ = new CharacterEditorDialog(this);
+    if (!path.isEmpty()) char_editor_->load(path);
+    char_editor_->show();
+    char_editor_->raise();
+    char_editor_->activateWindow();
 }
 
 void MainWindow::about() {

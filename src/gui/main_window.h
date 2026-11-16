@@ -9,6 +9,7 @@ class QLabel;
 namespace loftools {
 
 class SanitizerDialog;
+class CharacterEditorDialog;
 
 // The application shell.  It owns the menu bar; the sanitizer lives in its own
 // dialog so that the future save-game / character editors can be added as
@@ -23,13 +24,18 @@ public:
     // command line).
     void open_path(const QString& path);
 
+    // Open the character editor, optionally on a given path.
+    void open_character_editor_path(const QString& path);
+
 private slots:
     void open_file();
     void open_sanitizer();
+    void open_character_editor();
     void about();
 
 private:
     SanitizerDialog* sanitizer_ = nullptr;
+    CharacterEditorDialog* char_editor_ = nullptr;
     QLabel* hint_ = nullptr;
     QString last_dir_;
 };
