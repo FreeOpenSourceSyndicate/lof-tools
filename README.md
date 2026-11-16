@@ -97,6 +97,11 @@ tools appear as new tabs):
   Saving recomputes the integrity checksum, so the game's cheat protection
   accepts the file.
 
+  Its field groups reflow: they pack into as many rows as the window width
+  allows, so narrowing the window adds rows instead of a horizontal scrollbar.
+  A horizontal scrollbar only appears if a single group no longer fits on a row
+  of its own.
+
 The file is always opened from the menu bar (**File > Open**); the tabs have no
 separate Open button, since a single open feeds every tab.
 

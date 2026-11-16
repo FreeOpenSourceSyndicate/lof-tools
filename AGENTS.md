@@ -33,6 +33,15 @@ ctest --test-dir build --output-on-failure
 
 Qt6 is optional; without it only `lof-cli` and `lof-tests` are built.
 
+### GUI shell
+
+`MainWindow` is a tabbed shell: **File > Open** loads one file into every
+`ToolPanel` tab (`SanitizerPanel`, `CharacterEditorPanel`); tools never open
+files themselves. The character editor's field groups live in
+`src/gui/flow_layout.h` (`FlowLayout`), which packs them into as many rows as the
+width allows so narrowing the window adds rows instead of a horizontal
+scrollbar; the scrollbar only appears when one group cannot fit a row alone.
+
 ## Task 1 (done): cheat-protection sanitizer
 
 Checks whether the game's cheat protection would flag the open file (or any

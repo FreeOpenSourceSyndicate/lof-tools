@@ -8,7 +8,6 @@
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
-#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
@@ -22,6 +21,7 @@
 #include <QVBoxLayout>
 
 #include "core/tables.h"
+#include "gui/flow_layout.h"
 
 namespace loftools {
 
@@ -29,6 +29,28 @@ namespace {
 
 constexpr int kStatMax = 255;
 constexpr int kSkillMax = 100;
+
+// A QStackedWidget whose height follows the current page's height-for-width, so
+// the flow layout inside a page can grow vertically when its groups wrap.
+class FormStack : public QStackedWidget {
+public:
+    using QStackedWidget::QStackedWidget;
+
+    bool hasHeightForWidth() const override {
+        return currentWidget() && currentWidget()->hasHeightForWidth();
+    }
+    int heightForWidth(int w) const override {
+        return currentWidget() ? currentWidget()->heightForWidth(w) : -1;
+    }
+    QSize sizeHint() const override {
+        return currentWidget() ? currentWidget()->sizeHint()
+                               : QStackedWidget::sizeHint();
+    }
+    QSize minimumSizeHint() const override {
+        return currentWidget() ? currentWidget()->minimumSizeHint()
+                               : QStackedWidget::minimumSizeHint();
+    }
+};
 
 QSpinBox* make_spin(int lo, int hi, QWidget* parent) {
     auto* s = new QSpinBox(parent);
@@ -62,7 +84,11 @@ int combo_index_for_value(const QComboBox* box, int value) {
 CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
 
-    auto* top = new QHBoxLayout();
+    // The small field groups flow into as many rows as the width allows; the
+    // flow layout only overflows (and so shows a horizontal scrollbar) when a
+    // single group cannot fit on a row of its own.
+    auto* flow_host = new QWidget(this);
+    auto* flow = new FlowLayout(flow_host, 0, 8, 8);
 
     auto* identity = new QGroupBox(tr("Identity"), this);
     auto* id_form = new QFormLayout(identity);
@@ -85,7 +111,7 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     id_form->addRow(tr("Race"), race_);
     id_form->addRow(tr("Profession"), profession_);
     id_form->addRow(tr("Alignment"), alignment_);
-    top->addWidget(identity);
+    flow->addWidget(identity);
 
     auto* attrs = new QGroupBox(tr("Attributes"), this);
     auto* attr_form = new QFormLayout(attrs);
@@ -99,7 +125,7 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     attr_form->addRow(tr("Dexterity"), dex_);
     attr_form->addRow(tr("Intelligence"), intel_);
     attr_form->addRow(tr("Wisdom"), wis_);
-    top->addWidget(attrs);
+    flow->addWidget(attrs);
 
     auto* vitals = new QGroupBox(tr("Vitals"), this);
     auto* vit_form = new QFormLayout(vitals);
@@ -111,7 +137,7 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     vit_form->addRow(tr("Hit points (max)"), hp_max_);
     vit_form->addRow(tr("Magic points (current)"), mp_cur_);
     vit_form->addRow(tr("Magic points (max)"), mp_max_);
-    top->addWidget(vitals);
+    flow->addWidget(vitals);
 
     auto* money = new QGroupBox(tr("Money && Progress"), this);
     auto* money_form = new QFormLayout(money);
@@ -123,11 +149,7 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     money_form->addRow(tr("Gold (purse)"), gold_);
     money_form->addRow(tr("Gold (deposit)"), deposit_);
     money_form->addRow(tr("Rations"), rations_);
-    top->addWidget(money);
-
-    root->addLayout(top);
-
-    auto* mid = new QHBoxLayout();
+    flow->addWidget(money);
 
     auto* skills = new QGroupBox(tr("Skills (%)"), this);
     auto* skill_grid = new QGridLayout(skills);
@@ -138,7 +160,7 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
         skills_.push_back(spin);
         skill_grid->addWidget(spin, (int)i, 1);
     }
-    mid->addWidget(skills);
+    flow->addWidget(skills);
 
     auto* langs = new QGroupBox(tr("Languages"), this);
     auto* lang_grid = new QGridLayout(langs);
@@ -147,7 +169,7 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
         languages_.push_back(cb);
         lang_grid->addWidget(cb, (int)i, 0);
     }
-    mid->addWidget(langs);
+    flow->addWidget(langs);
 
     inventory_ = new QTableWidget(char_off::kInventorySlots, 5, this);
     inventory_->setHorizontalHeaderLabels(
@@ -173,9 +195,10 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     }
     inventory_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     inventory_->setMinimumHeight(180);
-    mid->addWidget(inventory_, 2);
 
-    root->addLayout(mid, 1);
+    // The small field groups flow above the wide tables, which stay full width.
+    root->addWidget(flow_host);
+    root->addWidget(inventory_, 1);
 
     spells_ = new QTableWidget(char_off::kSpellSlots, 3, this);
     spells_->setHorizontalHeaderLabels({tr("#"), tr("Spell"), tr("Casts")});
@@ -382,7 +405,7 @@ CharacterEditorPanel::CharacterEditorPanel(QWidget* parent) : ToolPanel(parent) 
     // The form lives in a scroll area so the tab works on small screens.
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
-    forms_ = new QStackedWidget(scroll);
+    forms_ = new FormStack(scroll);
     scroll->setWidget(forms_);
     body->addWidget(scroll, 1);
 
