@@ -43,6 +43,21 @@ public:
     // A short label for a slot (e.g. "1" for a roster, "Slot 1" for a party).
     std::string slot_label(size_t index) const;
 
+    // --- save-game state (only meaningful for a save game) ---------------
+    // These are no-ops / defaults for a ROST roster.  Setting them marks the
+    // document dirty; save()/serialize() write them into the state block and
+    // refresh the checksum, so the game's cheat protection stays satisfied.
+    bool is_save_game() const { return kind_ == DocKind::SaveGame; }
+
+    // Party location id (tens*10 + ones), the value the engine turns into
+    // `DNGS\DNG%01d%01d`.  0 for a roster.
+    uint16_t save_location() const;
+    void set_save_location(uint16_t location);
+
+    // Party facing digit (0=N .. 3=W); kSaveFacingInvalid for a roster.
+    uint8_t save_facing() const;
+    void set_save_facing(uint8_t facing);
+
     // Recompute every integrity checksum from the current character bytes and
     // write the document back to `path` (or to out_path when non-empty).
     // Returns false and sets error() on failure.

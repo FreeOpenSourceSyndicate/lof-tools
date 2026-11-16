@@ -3,6 +3,7 @@
 //   lof-cli check   <file>            report what the cheat protection sees
 //   lof-cli fix     <file> [out]      repair in place (or write to `out`)
 //   lof-cli dump    <file>            print every character field it can decode
+//   lof-cli state   <file>            print save-game state (party, position)
 #include <cstdio>
 #include <string>
 
@@ -101,12 +102,46 @@ static int dump(const std::string& path) {
     return 0;
 }
 
+static int dump_state(const std::string& path) {
+    CharacterDocument doc = CharacterDocument::load(path);
+    if (!doc.ok()) {
+        std::fprintf(stderr, "cannot read %s: %s\n", path.c_str(),
+                     doc.error().c_str());
+        return 1;
+    }
+    if (!doc.is_save_game()) {
+        std::fprintf(stderr, "%s is a ROST roster, not a save game\n",
+                     path.c_str());
+        return 1;
+    }
+    const uint16_t loc = doc.save_location();
+    std::printf("file     : %s\n", path.c_str());
+    std::printf("location : %u -> %s (region %s)\n", loc,
+                dungeon_map_name(loc).c_str(), scenario_name(loc % 10));
+    std::printf("facing   : %u (%s)\n", doc.save_facing(),
+                facing_name(doc.save_facing()));
+    std::printf("party    :\n");
+    for (size_t i = 0; i < doc.character_count(); ++i) {
+        const Character* c = doc.character(i);
+        if (!c || !c->present()) {
+            std::printf("  slot %zu : (empty)\n", i + 1);
+            continue;
+        }
+        std::printf("  slot %zu : %-12s %s %s, rank %u, HP %u/%u\n", i + 1,
+                    c->name().c_str(), race_name(c->race()),
+                    profession_name(c->profession()), c->level(), c->hp_cur(),
+                    c->hp_max());
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: lof-cli check <file>\n"
-                     "       lof-tools fix   <file> [out]\n"
-                     "       lof-tools dump  <file>\n");
+                     "       lof-cli fix   <file> [out]\n"
+                     "       lof-cli dump  <file>\n"
+                     "       lof-cli state <file>\n");
         return 2;
     }
     const std::string cmd = argv[1];
@@ -124,6 +159,7 @@ int main(int argc, char** argv) {
         return rep.file_ok ? 0 : 1;
     }
     if (cmd == "dump") return dump(path);
+    if (cmd == "state") return dump_state(path);
 
     std::fprintf(stderr, "unknown command: %s\n", cmd.c_str());
     return 2;

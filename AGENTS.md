@@ -18,8 +18,8 @@ Deliverable so far:
 
 | Binary              | Source | Purpose |
 |---------------------|--------|---------|
-| `lof-tools`         | `src/gui`   | Qt6 GUI (menu shell + sanitizer + character editor) |
-| `lof-cli`           | `src/cli`   | headless sanitizer + character dump |
+| `lof-tools`         | `src/gui`   | Qt6 GUI (menu shell + sanitizer + character editor + save-game editor) |
+| `lof-cli`           | `src/cli`   | headless sanitizer + character/save dump |
 | `lof-tests`         | `tests`     | unit tests over `testdata/` |
 | `lofcore` (static)  | `src/core`  | reusable data model + cheat-protection logic |
 
@@ -36,11 +36,18 @@ Qt6 is optional; without it only `lof-cli` and `lof-tests` are built.
 ### GUI shell
 
 `MainWindow` is a tabbed shell: **File > Open** loads one file into every
-`ToolPanel` tab (`SanitizerPanel`, `CharacterEditorPanel`); tools never open
-files themselves. The character editor's field groups live in
+`ToolPanel` tab (`SanitizerPanel`, `CharacterEditorPanel`, `SaveEditorPanel`);
+tools never open files themselves. A tool that writes the file emits
+`ToolPanel::file_changed`, and `MainWindow` reloads every *other* tab from it
+(the writer refreshes itself). The character editor's field groups live in
 `src/gui/flow_layout.h` (`FlowLayout`), which packs them into as many rows as the
 width allows so narrowing the window adds rows instead of a horizontal
 scrollbar; the scrollbar only appears when one group cannot fit a row alone.
+
+The save-game editor double-clicks a party member to ask `MainWindow` to switch
+to the character editor on that slot (`open_character_editor_slot` ->
+`CharacterEditorPanel::select_slot`). Keep cross-tool jumps routed through the
+window, not through direct panel-to-panel calls.
 
 ## Task 1 (done): cheat-protection sanitizer
 
@@ -69,11 +76,21 @@ bytes. Mismatch -> the engine sets char byte `+0x0C = 0xFC` (asm `0x2A1F6`).
 
 ```
 off 0      : 4-byte header {00 'F' 'O' 'L'}
-off 4      : 6 party characters, 410 bytes each
-...        : further game state (location, facing, map cache, ...)
+off 4      : 6 party characters, 410 bytes each (ends at off 2464)
+...        : further game state (map cache, ...)
+off 0x9a2  : byte  ones digit of the party's dungeon id
+off 0x9a4  : byte  tens digit of the party's dungeon id
+off 0x9a6  : byte  party facing (0=N .. 3=W)
 off 11834  : 4-byte little-endian checksum of bytes [0, 11834)
 off 11838  : 1296-byte (36x36) map region, NOT covered by the checksum
 ```
+
+The party's dungeon id is split into two decimal digits; the engine composes the
+map name `DNGS\DNG%01d%01d` from tens and ones (asm `0x4bb35`). `SaveGame`
+exposes it as a single value `location() == tens*10 + ones` and `set_location()`
+re-splits it; `facing` is 0..3. Both live inside the checksummed region, so the
+editor changes them through `CharacterDocument`, whose `save()` recomputes the
+whole-file checksum (see `serialize_save()`).
 
 The engine validates the whole-file checksum at asm `0x1C823`: it checks the
 magic (`0x1C814` `cmp es:[bx],0x4600`; `0x1C81B` `cmp es:[bx+2],0x4C4F`), then
@@ -81,7 +98,7 @@ magic (`0x1C814` `cmp es:[bx],0x4600`; `0x1C81B` `cmp es:[bx+2],0x4C4F`), then
 routine as the ROST checksum) and compares the returned `DX:AX` with the stored
 `[bp-0x51a]/[bp-0x518]`. A mismatch prints " is not a valid game:" and refuses
 the file. Party characters carry the same `0xFC` tamper byte at `+0x0C`, acted
-on at asm `0xB0CB`.
+on at asm `0xB0CB`. The engine's own save loader is at asm `0x1C952`.
 
 `testdata/` holds the verified fixtures: `ROST1.cheat`, `ROST2.banked`,
 `GAME1` (Temple, loc 5), `GAME4` (Cyldane, loc 0). The known-good ROST trailers
@@ -125,6 +142,30 @@ saves. The authoritative, complete map is
 Fields we are **not** yet sure about (deliberately left out of the editor) are
 listed at the end of `docs/character-format.md`.
 
+## Task 2 (done): save-game editor
+
+`SaveEditorPanel` (`src/gui/save_editor_panel.*`) is a tab that edits the
+non-character state of a save game and shows its party. It is built entirely on
+the reusable core so a later editor can share the same pieces:
+
+- `SaveGame` (`src/core/savegame.h`) parses the file and exposes the mutable
+  state: `location()` / `set_location()` (the dungeon id, `tens*10 + ones`),
+  `facing` / `set_facing()`, and the party as `Character` records.
+  `serialize_save()` copies the party and the digit bytes back into the raw image
+  and refreshes the whole-file checksum.
+- `CharacterDocument` (`src/core/document.h`) is the single editable model for
+  both rosters and saves. The panel edits through it, so `save()` always writes a
+  checksum-valid file: `is_save_game()`, `save_location()`/`set_save_location()`,
+  `save_facing()`/`set_save_facing()` (no-ops for a roster).
+- Name tables (`src/core/tables.h`, `src/core/names.cpp`): `facing_name()`,
+  `scenario_name()` (the 8 scenario names), and `dungeon_map_name()` for the
+  `DNGS\DNGnn` label.
+
+Verified end-to-end: an offscreen probe drove the panel's widgets, clicked
+**Save**, and the written file parsed back with the new location/facing and a
+valid checksum (`sv.intact()`). `tests/test_core.cpp::test_save_editor_roundtrip`
+covers the same path plus clamping of out-of-range input.
+
 ## Conventions / hygiene
 
 - **Commit and push regularly.** The workspace can reset; unpushed work is lost.
@@ -145,12 +186,12 @@ listed at the end of `docs/character-format.md`.
 
 ## Next tasks
 
-- **Save-game editor** (planned): reuse `src/core/document.h`
-  (`CharacterDocument`), `src/core/savegame.*` and `src/core/character.*`; add a
-  `Tools` menu entry and a dialog. The character editor already works on a save's
-  party, so a save editor mainly needs to expose the non-character game state
-  (location, map, gold-in-bank, etc.).
-- The character editor and the `lof-cli dump` command share the same model; keep
-  both in sync when new fields are confirmed.
+- **Save-game editor** (done for party position): `SaveEditorPanel` edits the
+  party position (dungeon id + facing) and shows the roster; the character editor
+  already edits a save's party members. More non-character state (bank/gold,
+  game time, map cache) can be added once its layout is confirmed from the
+  disassembly - only offer a field once it is verified.
+- The character editor, the save editor and `lof-cli` share the same
+  `CharacterDocument` model; keep them in sync when new fields are confirmed.
 - When new characters (other classes/races) or shop item orders arrive from the
   maintainer, extend `testdata/` and the assertions in `tests/test_core.cpp`.

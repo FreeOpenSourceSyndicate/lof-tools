@@ -26,6 +26,22 @@ size_t SaveGame::tampered_party_count() const {
     return n;
 }
 
+void SaveGame::set_location(uint16_t location) {
+    if (location > kSaveLocationMax) location = kSaveLocationMax;
+    loc_tens = (uint8_t)(location / 10);
+    loc_ones = (uint8_t)(location % 10);
+    if (raw.size() > kSaveLocTens) {
+        raw[kSaveLocOnes] = loc_ones;
+        raw[kSaveLocTens] = loc_tens;
+    }
+}
+
+void SaveGame::set_facing(uint8_t value) {
+    if (value > 3) value = 3;
+    facing = value;
+    if (raw.size() > kSaveFacing) raw[kSaveFacing] = facing;
+}
+
 SaveGame parse_save(const std::vector<uint8_t>& file) {
     SaveGame out;
     out.raw = file;
@@ -66,19 +82,27 @@ SaveGame parse_save(const std::vector<uint8_t>& file) {
 
 std::vector<uint8_t> serialize_save(const SaveGame& save) {
     std::vector<uint8_t> out = save.raw;
-    if (out.size() < kSaveStateSize + kSaveChecksumSize) {
-        out.resize(kSaveSize, 0);
-    }
-    // Write the party characters back into the state block.
+    if (out.size() < kSaveSize) out.resize(kSaveSize, 0);
+    // Write the party characters and the digit state bytes back into the block.
     for (size_t i = 0; i < kSavePartySlots; ++i) {
         const size_t off = kSaveHeaderSize + i * kCharSize;
         std::memcpy(out.data() + off, save.party[i].raw().data(), kCharSize);
     }
+    out[kSaveLocOnes] = save.loc_ones;
+    out[kSaveLocTens] = save.loc_tens;
+    if (save.facing != kSaveFacingInvalid) out[kSaveFacing] = save.facing;
     // Refresh the whole-file checksum.
     uint8_t tail[4];
     write_u32le(tail, lof_checksum(out.data(), kSaveStateSize));
     std::memcpy(out.data() + kSaveStateSize, tail, 4);
     return out;
+}
+
+std::string dungeon_map_name(uint16_t location) {
+    if (location > kSaveLocationMax) return "";
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "DNG%u%u", location / 10, location % 10);
+    return buf;
 }
 
 }  // namespace loftools

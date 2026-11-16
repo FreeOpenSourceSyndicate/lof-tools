@@ -53,6 +53,7 @@ if(Qt6_FOUND)
     src/gui/flow_layout.cpp
     src/gui/sanitizer_panel.cpp
     src/gui/character_editor_panel.cpp
+    src/gui/save_editor_panel.cpp
   )
   target_link_libraries(lof-tools PRIVATE lofcore Qt6::Widgets)
   if(MSVC)
@@ -71,4 +72,5 @@ add_executable(lof-tests tests/test_core.cpp)
 target_link_libraries(lof-tests PRIVATE lofcore)
 add_test(NAME core COMMAND lof-tests ${CMAKE_CURRENT_SOURCE_DIR}/testdata)
 set_tests_properties(core PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
 

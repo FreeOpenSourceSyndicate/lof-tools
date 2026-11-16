@@ -490,6 +490,10 @@ void CharacterEditorPanel::on_slot_changed(int index) {
     if (index >= 0 && index < (int)forms_->count()) forms_->setCurrentIndex(index);
 }
 
+void CharacterEditorPanel::select_slot(int index) {
+    if (index >= 0 && index < slots_->count()) slots_->setCurrentRow(index);
+}
+
 void CharacterEditorPanel::collect_edits() {
     for (size_t i = 0; i < slot_forms_.size(); ++i) {
         Character* c = doc_.character(i);

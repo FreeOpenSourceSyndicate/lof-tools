@@ -19,6 +19,7 @@
 
 #include "gui/character_editor_panel.h"
 #include "gui/sanitizer_panel.h"
+#include "gui/save_editor_panel.h"
 
 namespace loftools {
 
@@ -56,10 +57,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(sanitize, &QAction::triggered, this, &MainWindow::show_sanitizer);
     QAction* char_editor = tools->addAction(tr("&Character editor"));
     connect(char_editor, &QAction::triggered, this, &MainWindow::show_character_editor);
-    tools->addSeparator();
-    QAction* save_editor = tools->addAction(tr("Save game editor"));
-    save_editor->setEnabled(false);
-    save_editor->setToolTip(tr("Planned"));
+    QAction* save_editor = tools->addAction(tr("Save game &editor"));
+    connect(save_editor, &QAction::triggered, this, &MainWindow::show_save_editor);
 
     // --- Help menu --------------------------------------------------------
     QMenu* help = menuBar()->addMenu(tr("&Help"));
@@ -98,16 +97,31 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 void MainWindow::build_tools() {
     sanitizer_ = new SanitizerPanel(this);
     char_editor_ = new CharacterEditorPanel(this);
+    save_editor_ = new SaveEditorPanel(this);
 
     tabs_->addTab(sanitizer_, sanitizer_->tool_name());
     tabs_->addTab(char_editor_, char_editor_->tool_name());
+    tabs_->addTab(save_editor_, save_editor_->tool_name());
 
-    connect(sanitizer_, &ToolPanel::file_changed, this, [this](const QString& p) {
-        if (p == path_) sanitizer_->load_file(path_);  // keep the view in sync
-    });
-    connect(char_editor_, &ToolPanel::file_changed, this, [this](const QString& p) {
-        if (p == path_) sanitizer_->load_file(path_);
-    });
+    // Any tool that writes the open file tells the window, which reloads the
+    // others so their views reflect the new bytes (the writers refresh
+    // themselves).
+    const auto resync = [this](ToolPanel* writer, const QString& p) {
+        if (p != path_) return;
+        if (writer != sanitizer_) sanitizer_->load_file(path_);
+        if (writer != char_editor_) char_editor_->load_file(path_);
+        if (writer != save_editor_) save_editor_->load_file(path_);
+    };
+    connect(sanitizer_, &ToolPanel::file_changed, this,
+            [this, resync](const QString& p) { resync(sanitizer_, p); });
+    connect(char_editor_, &ToolPanel::file_changed, this,
+            [this, resync](const QString& p) { resync(char_editor_, p); });
+    connect(save_editor_, &ToolPanel::file_changed, this,
+            [this, resync](const QString& p) { resync(save_editor_, p); });
+    // Double-clicking a party member in the save editor jumps to that slot in
+    // the character editor.
+    connect(save_editor_, &SaveEditorPanel::edit_character_requested, this,
+            &MainWindow::open_character_editor_slot);
 }
 
 void MainWindow::open_file() {
@@ -123,6 +137,7 @@ void MainWindow::open_path(const QString& path) {
     last_dir_ = QFileInfo(path).absolutePath();
     const bool ok = sanitizer_->load_file(path);
     char_editor_->load_file(path);
+    save_editor_->load_file(path);
     show_tools();
     statusBar()->showMessage(
         ok ? tr("Opened %1").arg(path)
@@ -164,10 +179,25 @@ void MainWindow::show_character_editor() {
     tabs_->setCurrentWidget(char_editor_);
 }
 
+void MainWindow::show_save_editor() {
+    if (path_.isEmpty()) {
+        open_file();
+        if (path_.isEmpty()) return;
+    }
+    show_tools();
+    tabs_->setCurrentWidget(save_editor_);
+}
+
 void MainWindow::open_character_editor_path(const QString& path) {
     if (!path.isEmpty()) open_path(path);
     show_tools();
     tabs_->setCurrentWidget(char_editor_);
+}
+
+void MainWindow::open_character_editor_slot(int slot) {
+    show_tools();
+    tabs_->setCurrentWidget(char_editor_);
+    char_editor_->select_slot(slot);
 }
 
 void MainWindow::about() {
@@ -176,8 +206,9 @@ void MainWindow::about() {
         tr("<h3>Legend of Faerghail Tools</h3>"
            "<p>Utilities for the 1990 DOS RPG <i>Legend of Faerghail</i>.</p>"
            "<p>Each tool is a tab. Opening a file loads it into every tool: the "
-           "sanitizer checks and repairs the game's cheat protection, and the "
-           "character editor edits the characters.</p>"
+           "sanitizer checks and repairs the game's cheat protection, the "
+           "character editor edits the party members, and the save-game editor "
+           "edits the party's position.</p>"
            "<p>This is an independent, unofficial tool. It is not affiliated "
            "with the original authors or publishers.</p>"));
 }

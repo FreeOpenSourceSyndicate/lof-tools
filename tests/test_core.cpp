@@ -375,6 +375,59 @@ static void test_tables() {
     }
 }
 
+// End-to-end: edit a save game's party position through the document model and
+// confirm the state persists with a refreshed, valid checksum.
+static void test_save_editor_roundtrip(const std::string& dir) {
+    CharacterDocument doc = CharacterDocument::load(dir + "/GAME4");
+    CHECK(doc.ok());
+    CHECK(doc.kind() == DocKind::SaveGame);
+    CHECK(doc.is_save_game());
+    CHECK(doc.character_count() == kSavePartySlots);
+    CHECK(doc.save_location() == 0);   // GAME4: loc_ones=0, loc_tens=0
+    CHECK(doc.save_facing() == 3);     // GAME4 faces West
+
+    // Move the party and turn; also edit a party member.
+    doc.set_save_location(35);         // tens 3, ones 5
+    doc.set_save_facing(1);            // East
+    Character* c = doc.character(0);
+    CHECK(c != nullptr);
+    c->set_gold(4242);
+
+    const std::vector<uint8_t> out = doc.serialize();
+    CHECK(out.size() == kSaveSize);
+
+    SaveGame sv = parse_save(out);
+    CHECK(sv.ok);
+    CHECK(sv.checksum_ok);             // checksum was refreshed for the edits
+    CHECK(sv.intact());
+    CHECK(sv.location() == 35);
+    CHECK(sv.loc_ones == 5 && sv.loc_tens == 3);
+    CHECK(sv.facing == 1);
+    CHECK(sv.party[0].gold() == 4242);
+
+    // The sanitizer must consider the edited image clean.
+    const std::string tmp = "/tmp/lof_tools_test_edit_save.bin";
+    CHECK(write_file(tmp, out));
+    SanitizeReport rep = inspect(tmp);
+    CHECK(rep.file_ok && !rep.flagged);
+    std::remove(tmp.c_str());
+
+    // Out-of-range inputs are clamped so the file stays loadable.
+    doc.set_save_location(200);
+    doc.set_save_facing(9);
+    SaveGame clamped = parse_save(doc.serialize());
+    CHECK(clamped.location() == kSaveLocationMax);
+    CHECK(clamped.loc_ones == 9 && clamped.loc_tens == 9);
+    CHECK(clamped.facing == 3);
+
+    // A roster ignores save-game state changes (no crash, no effect).
+    CharacterDocument rost = CharacterDocument::load(dir + "/ROST.user");
+    CHECK(rost.ok() && !rost.is_save_game());
+    rost.set_save_location(42);
+    CHECK(rost.save_location() == 0);
+    CHECK(rost.serialize() == rost.serialize());
+}
+
 int main(int argc, char** argv) {
     const std::string dir = data_dir(argc, argv);
     test_rost_fixture(dir);
@@ -385,6 +438,7 @@ int main(int argc, char** argv) {
     test_end_to_end(dir);
     test_character_fields(dir);
     test_character_edit_roundtrip(dir);
+    test_save_editor_roundtrip(dir);
     test_tables();
 
     std::printf("%d checks, %d failure(s)\n", g_checks, g_failures);

@@ -64,6 +64,28 @@ const char* const kLanguageNames[kLanguageCount] = {
     "Magic tongue",
 };
 
+// Status-box tables from LOF.EXE: the scenario titles at image 0x42240 (8 x 22,
+// naming the region a party location belongs to) and the compass headings at
+// 0x422f0 (4 x 22, "Facing North".."Facing West").  The leading spaces the
+// engine uses for centring are trimmed here.
+const char* const kScenarioNames[kScenarioCount] = {
+    "Valley of Faerghail",
+    "Monastery of Sagacita",
+    "Sagacita catakombs",
+    "The Mines",
+    "The Pyramid",
+    "The Temple",
+    "The Castle",
+    "The Mountain",
+};
+
+const char* const kFacingNames[kFacingCount] = {
+    "North",
+    "East",
+    "South",
+    "West",
+};
+
 }  // namespace
 
 const ItemInfo* item_by_index(int index1based) {
@@ -98,6 +120,14 @@ const char* skill_name(size_t index) {
 
 const char* language_name(size_t index) {
     return index < kLanguageCount ? kLanguageNames[index] : "?";
+}
+
+const char* scenario_name(uint8_t index) {
+    return index < kScenarioCount ? kScenarioNames[index] : "?";
+}
+
+const char* facing_name(uint8_t index) {
+    return index < kFacingCount ? kFacingNames[index] : "?";
 }
 
 }  // namespace loftools
