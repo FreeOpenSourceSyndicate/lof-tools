@@ -5,7 +5,6 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFileDialog>
-#include <QFileInfo>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -397,18 +396,15 @@ CharacterEditorPanel::CharacterEditorPanel(QWidget* parent) : ToolPanel(parent) 
     root->addWidget(note_);
 
     auto* buttons = new QHBoxLayout();
-    auto* open = new QPushButton(tr("Open file..."), this);
     save_ = new QPushButton(tr("Save"), this);
     save_as_ = new QPushButton(tr("Save as..."), this);
     auto* reload = new QPushButton(tr("Reload"), this);
-    buttons->addWidget(open);
-    buttons->addStretch(1);
     buttons->addWidget(reload);
+    buttons->addStretch(1);
     buttons->addWidget(save_as_);
     buttons->addWidget(save_);
     root->addLayout(buttons);
 
-    connect(open, &QPushButton::clicked, this, &CharacterEditorPanel::on_open);
     connect(save_, &QPushButton::clicked, this, &CharacterEditorPanel::on_save);
     connect(save_as_, &QPushButton::clicked, this, &CharacterEditorPanel::on_save_as);
     connect(reload, &QPushButton::clicked, this, &CharacterEditorPanel::on_reload);
@@ -428,15 +424,6 @@ bool CharacterEditorPanel::load_file(const QString& path) {
     rebuild_forms();
     update_header();
     return true;
-}
-
-void CharacterEditorPanel::on_open() {
-    const QString path = QFileDialog::getOpenFileName(
-        this, tr("Open ROST or save game"), QFileInfo(path_).absolutePath(),
-        tr("ROST / save game (ROST* GAME* *.SAV);;All files (*)"));
-    if (path.isEmpty()) return;
-    load_file(path);
-    if (doc_.ok()) emit file_changed(path);
 }
 
 void CharacterEditorPanel::rebuild_forms() {
@@ -534,8 +521,8 @@ void CharacterEditorPanel::update_header() {
     save_as_->setEnabled(loaded);
 
     if (!loaded) {
-        header_->setText(tr("<b>No file loaded.</b> Use File > Open, or the "
-                            "Open file button below."));
+        header_->setText(tr("<b>No file loaded.</b> Use File > Open in the menu "
+                            "bar to open a ROST or a save game."));
         note_->setVisible(true);
         return;
     }

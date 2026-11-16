@@ -95,7 +95,10 @@ tools appear as new tabs):
   deposit), rations, the nine skills, the eight languages, the inventory (48
   slots, with item, equipped flag, condition and charges) and the spell list.
   Saving recomputes the integrity checksum, so the game's cheat protection
-  accepts the file. It has its own **Open file...** button too.
+  accepts the file.
+
+The file is always opened from the menu bar (**File > Open**); the tabs have no
+separate Open button, since a single open feeds every tab.
 
 Opening a file loads it into *every* tool at once, so you can switch tabs without
 re-opening. **File > Reload** re-reads it and **File > Close file** returns to the
