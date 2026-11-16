@@ -50,6 +50,7 @@ if(Qt6_FOUND)
     src/gui/main.cpp
     src/gui/main_window.cpp
     src/gui/tool_panel.h
+    src/gui/flow_layout.cpp
     src/gui/sanitizer_panel.cpp
     src/gui/character_editor_panel.cpp
   )
@@ -70,3 +71,4 @@ add_executable(lof-tests tests/test_core.cpp)
 target_link_libraries(lof-tests PRIVATE lofcore)
 add_test(NAME core COMMAND lof-tests ${CMAKE_CURRENT_SOURCE_DIR}/testdata)
 set_tests_properties(core PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
