@@ -72,9 +72,13 @@ void fill_spell_combo(QComboBox* box) {
         box->addItem(QString::fromLatin1(kSpellNames[i]), (int)(i + 1));
 }
 
-int combo_index_for_value(const QComboBox* box, int value) {
+// Selecting a value that is not in the table would silently rewrite it as
+// "(empty)", so unknown ids get an extra entry that round-trips verbatim.
+int combo_index_for_value(QComboBox* box, int value) {
     const int idx = box->findData(value);
-    return idx >= 0 ? idx : 0;
+    if (idx >= 0) return idx;
+    box->addItem(QObject::tr("(unknown id %1)").arg(value), value);
+    return box->count() - 1;
 }
 
 }  // namespace
