@@ -313,6 +313,44 @@ static void test_character_fields(const std::string& dir) {
     CHECK(mira->spell_count() == 1 && mira->spell(0).id == 59);    // Glow
     CHECK(morgana->spell_count() == 2);
     CHECK(morgana->spell(0).id == 1 && morgana->spell(1).id == 2); // Burning hands, Light
+
+    // The spell array is 34 slots (0x142..0x185), so slot 33 is addressable and
+    // a spell written there must survive a save/reload untouched.
+    CHECK(char_off::kSpellSlots == 34);
+    CHECK(lara->spell(33).id == 0 && lara->spell(33).casts == 0);
+}
+
+// A character can carry a learned-spell count with a blank array: the engine
+// zeroes a slot's id on the last cast but never lowers 0x6a.  The count is a
+// stored field, so saving must round-trip it instead of recomputing it.
+static void test_spell_count_roundtrip(const std::string& dir) {
+    const std::string src = dir + "/ROST.user";
+    CharacterDocument doc = CharacterDocument::load(src);
+    CHECK(doc.ok());
+    if (!doc.ok()) return;
+
+    Character* c = doc.character(0);
+    CHECK(c != nullptr);
+    if (!c) return;
+
+    SpellSlot last{};
+    last.id = 118;
+    last.casts = 0;
+    c->set_spell(33, last);
+    c->set_spell_count(34);
+
+    const std::string out = dir + "/spellcount.tmp";
+    CHECK(doc.save(out));
+
+    CharacterDocument back = CharacterDocument::load(out);
+    CHECK(back.ok());
+    if (!back.ok()) return;
+    const Character* r = back.character(0);
+    CHECK(r != nullptr);
+    if (!r) return;
+    CHECK(r->spell_count() == 34);
+    CHECK(r->spell(33).id == 118 && r->spell(33).casts == 0);
+    std::remove(out.c_str());
 }
 
 // Editing a field through the document and saving must refresh the checksum so
@@ -438,6 +476,7 @@ int main(int argc, char** argv) {
     test_end_to_end(dir);
     test_character_fields(dir);
     test_character_edit_roundtrip(dir);
+    test_spell_count_roundtrip(dir);
     test_save_editor_roundtrip(dir);
     test_tables();
 

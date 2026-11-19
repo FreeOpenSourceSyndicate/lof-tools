@@ -129,7 +129,7 @@ saves. The authoritative, complete map is
 | 0x44..0x48 | bytes | Con, Str, Dex, Int, Wis |
 | 0x64/0x66 | word | max / current carried weight (shown /10) |
 | 0x68/0x69 | byte | max / current MP |
-| 0x6a | byte | learned-spell count |
+| 0x6a | byte | learned-spell count (**stored**, see below — never recompute) |
 | 0x6b | byte | used inventory-slot count |
 | 0x6c | dword | experience (signed) |
 | 0x70 | byte | rations |
@@ -137,7 +137,32 @@ saves. The authoritative, complete map is
 | 0x76 | dword | gold (deposit / bank) — not in lof2 |
 | 0x7a | 8 bytes | language flags (one per language) |
 | 0x82 | 192 | 48 inventory slots x 4 bytes (item, equipped, charges, condition) |
-| 0x142 | 40 | 20 spell slots x 2 bytes (spell index, casts) |
+| 0x142 | 68 | **34** spell slots x 2 bytes (spell index, casts), 0x142..0x185 |
+
+### The spell array is 34 slots, and `0x6a` is not derived
+
+Two independent proofs for the width:
+
+* the engine's scan loop bounds itself with `cmp word ptr [bp-0x34], 0x22`
+  (0x22 = 34) while indexing `es:[bx+si+0x142]` with `bx = slot*2`
+  (asm `0x1387D` / `0x1389E`);
+* `0x142 + 34*2 = 0x186`, exactly where the next field starts — the engine
+  reads `es:[bx+si+0x186]` (asm `0x29195`), so 34 slots fill the gap exactly.
+
+`0x6a` is a **stored** byte, not a count of the array. The engine raises it when
+a spell is learned and never lowers it when a spell is spent: on the last cast
+it only zeroes that slot's spell index (asm `0x12A5E`) and leaves `0x6a` alone.
+The spell-list screen iterates `0x6a` entries (asm `0x2673F`), so a character
+can show a learned spell whose slot id is 0 and whose casts are 0. Consequences
+for the editors:
+
+* never recompute `0x6a` from the array — doing so silently drops spells the
+  game still lists (this was a real bug, fixed in `CharacterForm::apply`);
+* the editor exposes `0x6a` as its own field and marks counted-but-blank slots
+  as "(spent)" so they are not mistaken for free slots.
+
+Real example: `GAME1` slot 3 (Laladil) has `0x6a = 1` with the whole spell
+region zeroed — one learned spell, fully spent.
 
 Fields we are **not** yet sure about (deliberately left out of the editor) are
 listed at the end of `docs/character-format.md`.
