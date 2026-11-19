@@ -55,6 +55,7 @@ private:
     QSpinBox* hp_max_ = nullptr;
     QSpinBox* mp_cur_ = nullptr;
     QSpinBox* mp_max_ = nullptr;
+    QSpinBox* spell_count_ = nullptr;
 
     QSpinBox* exp_ = nullptr;
     QSpinBox* gold_ = nullptr;
@@ -100,6 +101,7 @@ private:
     CharacterDocument doc_;
     QString path_;
     bool dirty_ = false;
+    bool rebuilding_ = false;
 
     QListWidget* slots_ = nullptr;
     QStackedWidget* forms_ = nullptr;

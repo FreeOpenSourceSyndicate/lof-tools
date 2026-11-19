@@ -59,7 +59,7 @@ The character struct itself is always **410 (0x19a)** bytes.
 | 0x76 | 4 | gold (deposit) | verified | 32-bit; the bank balance |
 | 0x7a | 8 | languages | verified | one flag byte per language; non-zero = known |
 | 0x82 | 192 | inventory | verified | 48 slots x 4 bytes |
-| 0x142 | 40 | spells | verified | 20 slots x (spell index, remaining casts) |
+| 0x142 | 68 | spells | verified | 34 slots x (spell index, remaining casts) |
 
 ### Inventory slot (4 bytes at `0x82 + 4*n`)
 
@@ -70,12 +70,25 @@ The character struct itself is always **410 (0x19a)** bytes.
 | 2 | charges | remaining count / charges |
 | 3 | condition | durability 0..100 (100 = pristine, 0 = broken) |
 
-### Spell slot (2 bytes at `0x142 + 2*n`)
+### Spell slot (2 bytes at `0x142 + 2*n`, n = 0..33)
 
 | Byte | Field | Notes |
 |-----:|-------|-------|
 | 0 | spell index | 1-based into the 141-spell table (0 = empty) |
 | 1 | casts | remaining casts |
+
+The array is **34 slots**, not 20. Proof: the engine's spell scan loop runs
+`cmp word ptr [bp-0x34], 0x22` (34) over `es:[bx+si+0x142]` with `bx = slot*2`
+(asm `0x1387D` / `0x1389E`), and `0x142 + 34*2 = 0x186`, exactly where the next
+character field starts (read at asm `0x29195`).
+
+`0x6a` (the learned-spell count) is **not** a derived value. The engine raises it
+when a spell is learned and never lowers it when a spell is spent: on the last
+cast it only zeroes the slot's spell index (asm `0x12A5E`) and leaves `0x6a`
+alone. A character can therefore have `0x6a = 1` with an all-zero spell array,
+which is exactly what the game displays: the spell list screen iterates
+`0x6a` entries, so the slot is still listed (with no casts left). Editors must
+round-trip `0x6a` verbatim instead of recomputing it from the array.
 
 ## Enumerations and tables
 

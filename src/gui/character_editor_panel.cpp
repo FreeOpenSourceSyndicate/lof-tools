@@ -2,7 +2,9 @@
 
 #include <algorithm>
 
+#include <QBrush>
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -133,10 +135,12 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     hp_max_ = make_spin(0, 65535, this);
     mp_cur_ = make_spin(0, 255, this);
     mp_max_ = make_spin(0, 255, this);
+    spell_count_ = make_spin(0, (int)char_off::kSpellSlots, this);
     vit_form->addRow(tr("Hit points (current)"), hp_cur_);
     vit_form->addRow(tr("Hit points (max)"), hp_max_);
     vit_form->addRow(tr("Magic points (current)"), mp_cur_);
     vit_form->addRow(tr("Magic points (max)"), mp_max_);
+    vit_form->addRow(tr("Spells known (count)"), spell_count_);
     flow->addWidget(vitals);
 
     auto* money = new QGroupBox(tr("Money && Progress"), this);
@@ -237,6 +241,8 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     connect(hp_max_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(mp_cur_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(mp_max_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
+    connect(spell_count_, &QSpinBox::valueChanged, this,
+            &CharacterForm::on_any_change);
     connect(exp_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(gold_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(deposit_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
@@ -272,6 +278,7 @@ void CharacterForm::load(const Character& c) {
     hp_max_->setValue(c.hp_max());
     mp_cur_->setValue(c.mp_cur());
     mp_max_->setValue(c.mp_max());
+    spell_count_->setValue(c.spell_count());
 
     exp_->setValue(c.experience());
     gold_->setValue((int)std::min<uint32_t>(c.gold(), 2147483647u));
@@ -299,17 +306,24 @@ void CharacterForm::load(const Character& c) {
         auto* combo = qobject_cast<QComboBox*>(spells_->cellWidget((int)s, 1));
         combo->setCurrentIndex(combo_index_for_value(combo, sp.id));
         qobject_cast<QSpinBox*>(spells_->cellWidget((int)s, 2))->setValue(sp.casts);
+        // The engine lists the first `spell_count` slots, even when a slot's id
+        // was zeroed after its last cast was spent, so mark those explicitly.
+        QTableWidgetItem* num = spells_->item((int)s, 0);
+        const bool counted_blank = s < c.spell_count() && sp.id == 0;
+        num->setText(counted_blank ? tr("%1 (spent)").arg(s + 1)
+                                   : QString::number(s + 1));
+        num->setForeground(counted_blank ? QBrush(QColor(0xb0, 0x50, 0x00))
+                                         : QBrush());
     }
 
     derived_->setText(
         tr("<b>Read-only (recomputed by the engine):</b> defence %1, "
-           "weight %2/%3 (shown /10), inventory slots used %4, spells %5. "
-           "<b>Tamper flag:</b> %6")
+           "weight %2/%3 (shown /10), inventory slots used %4. "
+           "<b>Tamper flag:</b> %5")
             .arg(c.defence())
             .arg(c.weight_cur())
             .arg(c.weight_max())
             .arg(c.inv_used())
-            .arg(c.spell_count())
             .arg(c.tampered() ? tr("SET (0xFC) - will be cleared on save")
                               : tr("clear")));
     loading_ = false;
@@ -369,18 +383,16 @@ void CharacterForm::apply(Character& c) const {
 
     for (size_t s = 0; s < char_off::kSpellSlots; ++s) {
         auto* combo = qobject_cast<QComboBox*>(spells_->cellWidget((int)s, 1));
-        uint8_t id = (uint8_t)combo->currentData().toInt();
-        uint8_t casts =
+        SpellSlot slot;
+        slot.id = (uint8_t)combo->currentData().toInt();
+        slot.casts =
             (uint8_t)qobject_cast<QSpinBox*>(spells_->cellWidget((int)s, 2))->value();
-        c.raw()[char_off::kSpells + s * 2] = id;
-        c.raw()[char_off::kSpells + s * 2 + 1] = casts;
+        c.set_spell(s, slot);
     }
-    uint8_t spell_count = 0;
-    for (size_t s = 0; s < char_off::kSpellSlots; ++s) {
-        if (c.spell(s).id == 0) break;
-        ++spell_count;
-    }
-    c.set_spell_count(spell_count);
+    // 0x6a is a plain stored field, not a derived one: the engine leaves it
+    // alone when a spell is used up (it only zeroes the slot's id), so
+    // recomputing it here would silently drop spells the character still counts.
+    c.set_spell_count((uint8_t)spell_count_->value());
 }
 
 // ---------------------------------------------------------------------------
@@ -450,19 +462,26 @@ bool CharacterEditorPanel::load_file(const QString& path) {
 }
 
 void CharacterEditorPanel::rebuild_forms() {
+    // slots_->clear() emits currentRowChanged(-1) -> on_slot_changed() ->
+    // collect_edits(), which would copy the *old* widgets over the document we
+    // just loaded.  Drop the stale forms first and suppress collection while
+    // the list is being rebuilt.
+    slot_forms_.clear();
+    rebuilding_ = true;
     slots_->clear();
     while (forms_->count() > 0) {
         QWidget* w = forms_->widget(0);
         forms_->removeWidget(w);
         delete w;
     }
-    slot_forms_.clear();
 
     const size_t count = doc_.character_count();
     for (size_t i = 0; i < count; ++i) {
         const Character* c = doc_.character(i);
         QString label = QString::fromStdString(doc_.slot_label(i));
-        if (c) {
+        if (c && !c->present()) {
+            label += tr("  (empty)");
+        } else if (c) {
             QString nm = QString::fromLatin1(c->name().c_str());
             label += nm.isEmpty() ? tr("  (empty)") : QStringLiteral("  %1").arg(nm);
         }
@@ -470,6 +489,10 @@ void CharacterEditorPanel::rebuild_forms() {
 
         auto* form = new CharacterForm(this);
         if (c) form->load(*c);
+        // An empty party slot (present == 0) is a placeholder the engine skips.
+        // Editing it would write a character into a slot the game does not show,
+        // so keep the form visible but read-only.
+        if (c && !c->present()) form->setEnabled(false);
         connect(form, &CharacterForm::changed, this, [this]() {
             if (!dirty_) {
                 dirty_ = true;
@@ -483,6 +506,7 @@ void CharacterEditorPanel::rebuild_forms() {
         slots_->setCurrentRow(0);
         forms_->setCurrentIndex(0);
     }
+    rebuilding_ = false;
 }
 
 void CharacterEditorPanel::on_slot_changed(int index) {
@@ -495,6 +519,7 @@ void CharacterEditorPanel::select_slot(int index) {
 }
 
 void CharacterEditorPanel::collect_edits() {
+    if (rebuilding_) return;
     for (size_t i = 0; i < slot_forms_.size(); ++i) {
         Character* c = doc_.character(i);
         if (c) slot_forms_[i]->apply(*c);

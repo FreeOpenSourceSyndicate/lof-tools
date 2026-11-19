@@ -65,10 +65,14 @@ constexpr size_t kLanguages  = 0x7a;
 constexpr size_t kInventory  = 0x82;
 constexpr size_t kInventorySlots = 48;
 constexpr size_t kInventoryStride = 4;
-// The spell array: `kSpellCount` (0x6a) entries of (spell index, remaining
-// casts).  A spell index of 0 is an empty slot.  The array starts at 0x142.
+// The spell array: 34 slots of (spell index, remaining casts) starting at
+// 0x142.  A spell index of 0 is an empty slot.  The width is proven two ways:
+// the engine's spell scan loop runs `cmp word ptr [bp-0x34], 0x22` (34) over
+// `es:[bx+si+0x142]` with `bx = slot*2` (asm 0x1387D/0x1389E), and
+// 0x142 + 34*2 = 0x186, exactly where the next character field begins (asm
+// 0x29195).  `kSpellCount` (0x6a) says how many of the slots are in use.
 constexpr size_t kSpells     = 0x142;
-constexpr size_t kSpellSlots = 20;  // enough to cover the region up to 0x19a
+constexpr size_t kSpellSlots = 34;  // 0x142 .. 0x185 inclusive
 }  // namespace char_off
 
 // The value the engine writes into char_off::kTamperFlag when the stored
@@ -252,6 +256,10 @@ public:
     }
 
     // --- spells ---
+    // The count of learned spells.  The engine never recomputes it: it is
+    // raised when a spell is learned and left alone when a spell is used up, so
+    // a slot can be blank while still being counted (the engine zeroes the id
+    // once the last cast is spent, asm 0x12A5E).  Edit it explicitly.
     uint8_t spell_count() const { return raw_[char_off::kSpellCount]; }
     void set_spell_count(uint8_t v) { raw_[char_off::kSpellCount] = v; }
     SpellSlot spell(size_t slot) const {
@@ -261,6 +269,12 @@ public:
             s.casts = raw_[char_off::kSpells + slot * 2 + 1];
         }
         return s;
+    }
+    void set_spell(size_t slot, SpellSlot s) {
+        if (slot < char_off::kSpellSlots) {
+            raw_[char_off::kSpells + slot * 2] = s.id;
+            raw_[char_off::kSpells + slot * 2 + 1] = s.casts;
+        }
     }
 
 private:
