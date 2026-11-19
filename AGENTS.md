@@ -220,3 +220,12 @@ covers the same path plus clamping of out-of-range input.
   `CharacterDocument` model; keep them in sync when new fields are confirmed.
 - When new characters (other classes/races) or shop item orders arrive from the
   maintainer, extend `testdata/` and the assertions in `tests/test_core.cpp`.
+
+### Known open question (do not guess)
+
+A counted-but-blank spell slot (see the spell-array section above) shows no name,
+because the engine zeroes the slot's id on the last cast and stores the name
+nowhere else. `GAME1` slot 3 (Laladil) is such a case: `0x6a = 1` with the whole
+array zeroed. The editors label it "(spent)" / "(empty)" and leave the bytes
+alone. Do **not** invent a name for it — only change this if a save or
+disassembly passage proves the name is recorded somewhere.
