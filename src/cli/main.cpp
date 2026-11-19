@@ -73,8 +73,9 @@ static void dump_character(const Character& c) {
     std::printf("    spells     : %u learned\n", c.spell_count());
     for (size_t s = 0; s < c.spell_count() && s < char_off::kSpellSlots; ++s) {
         SpellSlot sp = c.spell(s);
-        std::printf("      %2u) %-18s %u cast(s)\n", (unsigned)s + 1,
-                    spell_name(sp.id), sp.casts);
+        std::printf("      %2u) %-18s %u cast(s)%s\n", (unsigned)s + 1,
+                    spell_name(sp.id), sp.casts,
+                    sp.id == 0 ? "  (spent)" : "");
     }
 }
 
