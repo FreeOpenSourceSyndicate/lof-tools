@@ -64,6 +64,17 @@ const char* const kLanguageNames[kLanguageCount] = {
     "Magic tongue",
 };
 
+// The character condition table from LOF.EXE: 8 fixed 6-byte short forms at
+// image 0x3cca0 and the NUL-separated long forms at 0x3ccd0.  Indexed by the
+// character's +0x1f byte.
+const char* const kStatusShortNames[kStatusCount] = {
+    "Good", "Mad", "Ill", "Poisn", "Blnd.", "Stun.", "Stone", "Dead",
+};
+
+const char* const kStatusLongNames[kStatusCount] = {
+    "Good", "Mad", "Ill", "Poisoned", "Blind", "Stunned", "Stoned", "Dead",
+};
+
 // Status-box tables from LOF.EXE: the scenario titles at image 0x42240 (8 x 22,
 // naming the region a party location belongs to) and the compass headings at
 // 0x422f0 (4 x 22, "Facing North".."Facing West").  The leading spaces the
@@ -120,6 +131,14 @@ const char* skill_name(size_t index) {
 
 const char* language_name(size_t index) {
     return index < kLanguageCount ? kLanguageNames[index] : "?";
+}
+
+const char* status_short_name(uint8_t index) {
+    return index < kStatusCount ? kStatusShortNames[index] : "?";
+}
+
+const char* status_long_name(uint8_t index) {
+    return index < kStatusCount ? kStatusLongNames[index] : "?";
 }
 
 const char* scenario_name(uint8_t index) {

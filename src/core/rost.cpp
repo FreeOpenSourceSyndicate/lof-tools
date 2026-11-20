@@ -75,8 +75,11 @@ std::vector<uint8_t> serialize_rost(const RostFile& rost) {
     for (const auto& r : rost.records) {
         const auto& raw = r.character.raw();
         out.insert(out.end(), raw.begin(), raw.end());
+        // Always write the checksum of the bytes as they are now.  A repair can
+        // change the struct after parse_rost() recorded the original trailer, so
+        // the stored value must never be written back verbatim.
         uint8_t tail[4];
-        write_u32le(tail, r.stored_checksum);
+        write_u32le(tail, lof_checksum(raw.data(), kCharSize));
         out.insert(out.end(), tail, tail + 4);
     }
     return out;

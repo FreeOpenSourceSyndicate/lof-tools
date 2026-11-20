@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "core/tables.h"
+
 namespace loftools {
 
 // The engine's saved-character struct is 410 (0x19a) bytes.  In a ROST file it
@@ -29,6 +31,7 @@ constexpr size_t kAlignment  = 0x19;  // byte  0 = lawful, 1 = chaotic
 constexpr size_t kRace       = 0x1a;  // byte  0 Human .. 5 Half-Orc
 constexpr size_t kProfession = 0x1b;  // byte  index into the profession table (0x0c/0xff = none)
 constexpr size_t kDefence    = 0x1e;  // byte  total defence / armour class
+constexpr size_t kStatus     = 0x1f;  // byte  condition index (0 Good .. 7 Dead)
 constexpr size_t kHpMax      = 0x20;  // word  maximum hit points
 constexpr size_t kHpCur      = 0x22;  // word  current hit points
 // The nine skill values (each 0..100), in the engine's own display order.  The
@@ -183,6 +186,23 @@ public:
     uint8_t defence() const { return raw_[char_off::kDefence]; }
 
     // --- vital statistics ---
+    // The condition byte.  It indexes the engine's status table (0 Good, 1 Mad,
+    // 2 Ill, 3 Poisoned, 4 Blind, 5 Stunned, 6 Stoned, 7 Dead).  Death sets it
+    // to 7 while leaving max HP alone; a *failed* temple revive zeroes both HP
+    // fields and leaves this at 7.  See docs/character-status-and-revive.md.
+    uint8_t status() const { return raw_[char_off::kStatus]; }
+    void set_status(uint8_t v) { raw_[char_off::kStatus] = v; }
+    bool is_dead() const { return status() == kStatusDead; }
+
+    // A character that died and then had a temple revive *fail*: status is Dead
+    // but max HP is 0.  Normal death never zeroes max HP, and the revive
+    // routine refuses a corpse with max HP 0 (asm 0xA7AA), so such a character
+    // can never be revived again in game.  The lost max-HP value is not stored
+    // anywhere in the 410-byte struct.  The character editor restores a
+    // plausible value via core/character_revive.h; prefer that module over this
+    // predicate.
+    bool unrevivable() const { return is_dead() && hp_max() == 0; }
+
     uint16_t hp_max() const { return word(char_off::kHpMax); }
     void set_hp_max(uint16_t v) { set_word(char_off::kHpMax, v); }
     uint16_t hp_cur() const { return word(char_off::kHpCur); }

@@ -191,6 +191,64 @@ Verified end-to-end: an offscreen probe drove the panel's widgets, clicked
 valid checksum (`sv.intact()`). `tests/test_core.cpp::test_save_editor_roundtrip`
 covers the same path plus clamping of out-of-range input.
 
+## Dead / unrevivable detection (character editor, not sanitizer)
+
+`src/core/character_revive.{h,cpp}` answers "which values mark a character as
+dead, and which mark it as beyond revival". It is Qt-free and shared by the
+editors.
+
+Two ordinary game states, both written by the engine itself (so **neither is
+corruption**, and **neither is a cheat-protection problem**):
+
+| state | condition | who writes it |
+|-------|-----------|---------------|
+| dead | `+0x1f` (status) == 7 | normal death: `258D8` zeroes `hp_cur`, `258EF` sets 7 |
+| unrevivable | status 7 **and** `+0x20` (max HP) == 0 | failed temple revive: `0xA8FE` |
+
+**This lives in the character editor, not the sanitizer.** The sanitizer reports
+only what the game's cheat protection would flag; a legitimately dead character
+is a valid game state, so `lof-cli check ROST3` correctly says "clean". The
+character editor shows the condition and offers *Restore revivability*.
+
+- The revive routine refuses any corpse with `hp_max == 0` (`0xA7AA`:
+  `cmp word es:[bx+si+0x20],0` / `je 0xa7b4`). The refusal branch is the `je`
+  because the *success* path never writes `+0x20`, so an `hp_max == 0` corpse
+  could otherwise be revived into an alive-but-max-0 character. `0xA8FE` is the
+  only `hp_max = 0` write in the image and it is on the failure path.
+- `0xAA06` clamps **current** HP (`+0x22`) to >= 1, *not* max HP. The `>= 1`
+  floor for max HP comes from creation (`1DA84`). Do not attribute it to `0xAA06`.
+- Success path (`0xA92A`..): `dec` Con if > 1, `status = 0`, add exp, clamp
+  `hp_cur >= 1`. It never touches `hp_max`.
+- `max HP` is **not** recoverable from the file: the failed revive overwrote it
+  and the 410-byte struct keeps no shadow copy.
+
+`restore_revivability()` writes **only** max HP, which returns the character to
+the ordinary dead state (status 7, `hp_cur` 0, `hp_max > 0`) so the temple
+accepts it again. It does not resurrect anyone.
+
+`estimate_hp_max()` supplies the value, derived from the engine's own HP model:
+
+- creation (`1DA40`..`1DA8E`): `rand(1..n/2) + n/2`, `n` = class `rec[0x2c]`,
+  then clamp to >= 1 (`1DA84`);
+- each level-up (`9164`..`91A6`): `rand(1..10)` added to **both** `+0x22` and
+  `+0x20`.
+
+So max HP is a random walk from a random start. The shipped characters roll
+5..18 at level 1 (mean 11.5) and gain a mean 5.5 per level, so the estimator
+returns `11.5 + 5.5 * (level - 1)` -- the middle of what the game could have
+rolled. Checked against the roster (excluding the unfinished slot and the two
+inflated cheat characters) it is within 1.5 HP on average, 7 HP worst case. It
+is an estimate, not the original.
+
+Verified against the maintainer's `ROST` / `ROST3` pair (same 18-record roster,
+slot 17 `Elzndra`): `ROST` is the post-successful-revive state (status 0,
+`hp_max` 5, `hp_cur` 1, Con 13, exp 2195); `ROST3` is post-failed-revive (status
+7, both HP 0, Con 14, exp 106). Fixtures: `testdata/ROST3.dead`,
+`testdata/ROST.revived`. Tests: `test_revive_state`, `test_estimate_hp_max`,
+`test_revive_roundtrip` in `tests/test_core.cpp`.
+
+Full write-up: `docs/character-status-and-revive.md`.
+
 ## Conventions / hygiene
 
 - **Commit and push regularly.** The workspace can reset; unpushed work is lost.

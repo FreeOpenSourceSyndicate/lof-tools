@@ -97,6 +97,15 @@ tools appear as new tabs):
   Saving recomputes the integrity checksum, so the game's cheat protection
   accepts the file.
 
+  The **Condition** group shows the status byte and flags a character that died
+  and then had a *temple revive fail*: that leaves status `Dead` with max HP
+  `0`, and the temple refuses such a corpse for good. A **Restore revivability**
+  button sets a plausible max HP, estimated from the character's level using the
+  engine's own HP model. It only restores max HP -- the character stays dead and
+  can then be revived normally. This is a normal game state, so it is reported
+  here and not by the sanitizer. See
+  [`docs/character-status-and-revive.md`](docs/character-status-and-revive.md).
+
   Its field groups reflow: they pack into as many rows as the window width
   allows, so narrowing the window adds rows instead of a horizontal scrollbar.
   A horizontal scrollbar only appears if a single group no longer fits on a row
@@ -130,6 +139,7 @@ displays.
 # Repair into a new file (leaves the original alone):
 ./build/lof-cli fix ROST/ROST ROST/ROST.fixed
 
+
 # Print every decoded character field (read-only):
 ./build/lof-cli dump ROST/ROST
 
@@ -146,9 +156,10 @@ ctest --test-dir build --output-on-failure
 ```
 
 The tests run against the committed fixtures in `testdata/` (`ROST1.cheat`,
-`ROST2.banked`, `ROST.user`, `GAME1`, `GAME4`) and cover the checksum, parsing,
-detection, end-to-end repair, the decoded character fields (asserted value by
-value against the maintainer's character sheet), and the edit round-trip.
+`ROST2.banked`, `ROST.user`, `ROST3.dead`, `ROST.revived`, `GAME1`, `GAME4`) and
+cover the checksum, parsing, detection, end-to-end repair, the decoded character
+fields (asserted value by value against the maintainer's character sheet), the
+dead / unrevivable marker values, and the edit round-trip.
 
 ## Character format
 
