@@ -33,6 +33,16 @@ ctest --test-dir build --output-on-failure
 
 Qt6 is optional; without it only `lof-cli` and `lof-tests` are built.
 
+A fresh workspace may have no toolchain at all: check `which cmake` first, and
+if it is missing run the `apt install` line above (needs `sudo`). `pkg-config` is
+not installed either, so compile ad-hoc GUI test programs against the Qt
+include dir directly (`/usr/include/x86_64-linux-gnu/qt6` plus its
+`QtWidgets`/`QtGui`/`QtCore` subdirs, `-lQt6Widgets -lQt6Gui -lQt6Core`), and
+link the generated `moc_*.cpp` for the classes you touch. Note that
+`python3 -m cmake` does **not** work here -- it fails with "No module named
+cmake" while leaving the old binary in place, so a stale `build/lof-tests` can
+silently report a passing run. Always confirm the binary timestamp moved.
+
 ### GUI shell
 
 `MainWindow` is a tabbed shell: **File > Open** loads one file into every
