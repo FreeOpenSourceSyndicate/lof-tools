@@ -90,6 +90,16 @@ tools appear as new tabs):
 - **Sanitizer** - lists every problem the cheat protection would find (per
   character for a roster, whole-file for a save) and offers **Fix & Save** to
   write the repaired file back.
+
+  It also reports the two values the game uses to mark a character as out of
+  action: status `7` marks it **dead**, and max HP `0` marks a corpse the temple
+  will **no longer revive** (a failed temple revive zeroes max HP; the revive
+  routine then refuses the corpse for good). Neither is corruption - both are
+  states the engine writes itself - so they are shown as findings, not as cheat
+  protection failures. Dead-but-revivable characters are listed for information;
+  an unrevivable one can be repaired by restoring its max HP (the value is not
+  stored in the file, so supply it, or take the engine's floor of 1). See
+  [`docs/character-status-and-revive.md`](docs/character-status-and-revive.md).
 - **Character editor** - edits a `ROST` roster or a save game one character at a
   time: identity, attributes, hit/magic points, experience, gold (purse and
   deposit), rations, the nine skills, the eight languages, the inventory (48
@@ -130,6 +140,10 @@ displays.
 # Repair into a new file (leaves the original alone):
 ./build/lof-cli fix ROST/ROST ROST/ROST.fixed
 
+# Repair a corpse the temple will no longer revive, restoring its max HP
+# (a failed revive zeroes max HP and the file keeps no copy of the old value):
+./build/lof-cli fix ROST3 ROST3.fixed --hp-max 5
+
 # Print every decoded character field (read-only):
 ./build/lof-cli dump ROST/ROST
 
@@ -146,9 +160,10 @@ ctest --test-dir build --output-on-failure
 ```
 
 The tests run against the committed fixtures in `testdata/` (`ROST1.cheat`,
-`ROST2.banked`, `ROST.user`, `GAME1`, `GAME4`) and cover the checksum, parsing,
-detection, end-to-end repair, the decoded character fields (asserted value by
-value against the maintainer's character sheet), and the edit round-trip.
+`ROST2.banked`, `ROST.user`, `ROST3.dead`, `ROST.revived`, `GAME1`, `GAME4`) and
+cover the checksum, parsing, detection, end-to-end repair, the decoded character
+fields (asserted value by value against the maintainer's character sheet), the
+dead / unrevivable marker values, and the edit round-trip.
 
 ## Character format
 

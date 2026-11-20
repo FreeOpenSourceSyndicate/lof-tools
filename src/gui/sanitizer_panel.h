@@ -8,7 +8,9 @@
 
 class QLabel;
 class QPushButton;
+class QSpinBox;
 class QTableWidget;
+class QWidget;
 
 namespace loftools {
 
@@ -36,6 +38,11 @@ private:
     QTableWidget* table_ = nullptr;
     QPushButton* fix_button_ = nullptr;
     QPushButton* recheck_button_ = nullptr;
+
+    // Restores max HP for an unrevivable character.  The lost value is not in
+    // the file, so the user supplies it here.
+    QWidget* hp_row_ = nullptr;
+    QSpinBox* hp_max_ = nullptr;
 
     QString path_;
     SanitizeReport report_;

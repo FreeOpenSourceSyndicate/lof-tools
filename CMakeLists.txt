@@ -20,6 +20,7 @@ add_library(lofcore STATIC
   src/core/tables/spells.cpp
   src/core/names.cpp
   src/core/character.cpp
+  src/core/character_revive.cpp
   src/core/rost.cpp
   src/core/savegame.cpp
   src/core/document.cpp

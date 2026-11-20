@@ -191,6 +191,50 @@ Verified end-to-end: an offscreen probe drove the panel's widgets, clicked
 valid checksum (`sv.intact()`). `tests/test_core.cpp::test_save_editor_roundtrip`
 covers the same path plus clamping of out-of-range input.
 
+## Dead / unrevivable detection (Task 1 extension)
+
+`src/core/character_revive.{h,cpp}` answers "which values mark a character as
+dead, and which mark it as beyond revival". It is the reusable piece the planned
+editors and the sanitizer share; keep it Qt-free.
+
+Two ordinary game states, both written by the engine itself (so **neither is
+corruption**):
+
+| state | condition | who writes it |
+|-------|-----------|---------------|
+| dead | `+0x1f` (status) == 7 | normal death: `258D8` zeroes `hp_cur`, `258EF` sets 7 |
+| unrevivable | status 7 **and** `+0x20` (max HP) == 0 | failed temple revive: `0xA8FE` |
+
+- The revive routine refuses any corpse with `hp_max == 0` (`0xA7AA`:
+  `cmp word es:[bx+si+0x20],0` / `je 0xa7b4`). The refusal branch is the `je`
+  because the *success* path never writes `+0x20`, so an `hp_max == 0` corpse
+  could otherwise be revived into an alive-but-max-0 character. `0xA8FE` is the
+  only `hp_max = 0` write in the image and it is on the failure path.
+- Success path (`0xA92A`..): `dec` Con if > 1, `status = 0`, add exp, clamp
+  `hp_cur >= 1` (`0xAA06`). It never touches `hp_max`.
+- `max HP` is **not** recoverable from the file: the failed revive overwrote it
+  and the 410-byte struct keeps no shadow copy. The repair therefore needs the
+  value from outside (player input / backup); `0` means "engine floor of 1".
+
+`repair_revive()` restores **only** `hp_max`, which returns the character to the
+ordinary dead state (status 7, `hp_cur` 0, `hp_max > 0`) so the temple accepts it
+again. It does not resurrect anyone.
+
+`SanitizeReport` separates the two concerns: `flagged` is cheat protection,
+`has_unrevivable` is this condition. `Finding::revive_blocked` marks the problem
+entry, `Finding::informational` marks a merely-dead-but-revivable entry (listed
+so the player sees the marker values; it is not a problem). Use
+`SanitizeReport::problem_count()` for "how many real problems".
+
+Verified against the maintainer's `ROST` / `ROST3` pair (same 18-record roster,
+slot 17 `Elzndra`): `ROST` is the post-successful-revive state (status 0,
+`hp_max` 5, `hp_cur` 1, Con 13, exp 2195); `ROST3` is post-failed-revive (status
+7, both HP 0, Con 14, exp 106). Fixtures: `testdata/ROST3.dead`,
+`testdata/ROST.revived`. Tests: `test_revive_state`,
+`test_revive_repair_roundtrip` in `tests/test_core.cpp`.
+
+Full write-up: `docs/character-status-and-revive.md`.
+
 ## Conventions / hygiene
 
 - **Commit and push regularly.** The workspace can reset; unpushed work is lost.

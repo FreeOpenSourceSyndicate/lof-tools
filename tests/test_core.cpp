@@ -8,6 +8,7 @@
 
 #include "core/checksum.h"
 #include "core/character.h"
+#include "core/character_revive.h"
 #include "core/document.h"
 #include "core/file_io.h"
 #include "core/rost.h"
@@ -466,6 +467,99 @@ static void test_save_editor_roundtrip(const std::string& dir) {
     CHECK(rost.serialize() == rost.serialize());
 }
 
+
+// The two marker values: status 7 marks a character Dead, max HP 0 marks a
+// corpse the temple will no longer raise.  ROST3 holds Elzndra in exactly the
+// state a failed temple revive leaves behind.
+static void test_revive_state(const std::string& dir) {
+    std::vector<uint8_t> file;
+    CHECK(read_file(dir + "/ROST3.dead", file));
+    RostFile rost = parse_rost(file);
+    CHECK(rost.ok);
+    if (!rost.ok || rost.records.size() < 18) return;
+
+    const Character& dead = rost.records[17].character;
+    CHECK(dead.name() == "Elzndra");
+    CHECK(dead.status() == kStatusDead);
+    CHECK(dead.hp_max() == 0);
+    CHECK(dead.hp_cur() == 0);
+    CHECK(revive_state(dead) == ReviveState::Unrevivable);
+
+    // Every other record is alive and untouched.
+    for (size_t i = 0; i < 17; ++i)
+        CHECK(revive_state(rost.records[i].character) == ReviveState::Alive);
+
+    // The repair restores max HP only, and must not resurrect the character.
+    Character c = dead;
+    ReviveFinding f = repair_revive(c, 5);
+    CHECK(f.state == ReviveState::Unrevivable);
+    CHECK(f.changes.size() == 1);
+    CHECK(f.changes[0].offset == char_off::kHpMax);
+    CHECK(f.changes[0].old_value == 0);
+    CHECK(f.changes[0].new_value == 5);
+    CHECK(c.hp_max() == 5);
+    CHECK(c.status() == kStatusDead);
+    CHECK(c.hp_cur() == 0);
+    CHECK(revive_state(c) == ReviveState::Dead);
+
+    // 0 falls back to the engine's own floor of 1 (asm 0xAA06).
+    Character c2 = dead;
+    repair_revive(c2, 0);
+    CHECK(c2.hp_max() == 1);
+    CHECK(revive_state(c2) == ReviveState::Dead);
+
+    // Nothing to do on an already-revivable corpse or a living character.
+    CHECK(repair_revive(c, 5).changes.empty());
+    CHECK(repair_revive(rost.records[0].character, 5).changes.empty());
+
+    // A dead character with max HP intact is reported as Dead, not unrevivable.
+    Character d;
+    d.set_name("Test");
+    d.set_present(true);
+    d.set_status(kStatusDead);
+    d.set_hp_max(7);
+    d.set_hp_cur(0);
+    CHECK(revive_state(d) == ReviveState::Dead);
+    CHECK(diagnose_revive(d, 5).changes.empty());
+
+    // An empty slot is never reported.
+    Character empty;
+    CHECK(revive_state(empty) == ReviveState::Alive);
+}
+
+// The repair round-trips through the file and the cheat protection stays happy.
+static void test_revive_repair_roundtrip(const std::string& dir) {
+    const std::string tmp = "/tmp/lof_revive_roundtrip";
+    SanitizeReport rep = sanitize(dir + "/ROST3.dead", tmp, 5);
+    CHECK(rep.file_ok);
+    CHECK(rep.fixed);
+    CHECK(rep.has_unrevivable);
+    // The cheat protection must not be tripped by the repair.
+    CHECK(!rep.flagged);
+    if (!rep.fixed) return;
+
+    std::vector<uint8_t> out;
+    CHECK(read_file(tmp, out));
+    RostFile after = parse_rost(out);
+    CHECK(after.ok);
+    if (!after.ok || after.records.size() < 18) return;
+    CHECK(after.all_intact());
+    const Character& e = after.records[17].character;
+    CHECK(e.name() == "Elzndra");
+    CHECK(e.hp_max() == 5);
+    CHECK(e.status() == kStatusDead);
+    CHECK(e.hp_cur() == 0);
+    CHECK(revive_state(e) == ReviveState::Dead);
+
+    // Re-inspecting the repaired file reports no problem, only an info entry.
+    SanitizeReport again = inspect(tmp);
+    CHECK(again.file_ok);
+    CHECK(!again.flagged);
+    CHECK(!again.has_unrevivable);
+    CHECK(again.problem_count() == 0);
+    std::remove(tmp.c_str());
+}
+
 int main(int argc, char** argv) {
     const std::string dir = data_dir(argc, argv);
     test_rost_fixture(dir);
@@ -478,6 +572,8 @@ int main(int argc, char** argv) {
     test_character_edit_roundtrip(dir);
     test_spell_count_roundtrip(dir);
     test_save_editor_roundtrip(dir);
+    test_revive_state(dir);
+    test_revive_repair_roundtrip(dir);
     test_tables();
 
     std::printf("%d checks, %d failure(s)\n", g_checks, g_failures);

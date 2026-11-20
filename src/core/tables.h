@@ -34,6 +34,13 @@ constexpr size_t kAlignmentCount = 2;
 constexpr size_t kSkillCount = 9;
 constexpr size_t kLanguageCount = 8;
 
+// The character condition/status table (char offset 0x1f).  Eight entries; the
+// engine's own table is 8 fixed 6-byte short forms at image 0x3cca0 with the
+// NUL-separated long forms at 0x3ccd0.  See docs/character-status-and-revive.md.
+constexpr size_t kStatusCount = 8;
+constexpr uint8_t kStatusGood = 0;
+constexpr uint8_t kStatusDead = 7;
+
 // Save-game status tables.  The party's location indexes the scenario titles
 // (the engine's status box shows the region the location belongs to); the
 // facing digit indexes the compass heading.  Transcribed from the lof2 project
@@ -57,6 +64,8 @@ const char* profession_name(uint8_t index);   // 0 Warrior .. 11 Monk
 const char* alignment_name(uint8_t index);    // 0 Lawful, 1 Chaotic
 const char* skill_name(size_t index);         // 0 .. 8
 const char* language_name(size_t index);      // 0 .. 7
+const char* status_short_name(uint8_t index); // 0 Good .. 7 Dead
+const char* status_long_name(uint8_t index);  // 0 Good .. 7 Dead
 
 // Scenario title for a party location (the ones digit indexes this table), and
 // the compass heading for a facing digit.  Out-of-range values return a

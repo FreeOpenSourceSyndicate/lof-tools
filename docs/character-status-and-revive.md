@@ -8,8 +8,8 @@ guess.
 ## The status byte is `+0x1f`
 
 `+0x1f` is the character's **condition / status**. It indexes the engine's
-own status table at image `0x42190` (8 records of 6 bytes, short forms) with
-the long forms packed at `0x421c0`:
+own status table: the short forms are 8 fixed 6-byte records at image
+`0x3cca0`, the long forms a NUL-separated list at `0x3ccd0`:
 
 | value | short | long |
 |------:|-------|------|
@@ -22,8 +22,12 @@ the long forms packed at `0x421c0`:
 | 6 | `Stone` | Stoned |
 | 7 | `Dead`  | Dead |
 
-(Table generated from the exe by `lof2/tools/spec.py`, emitted into
-`lof2/port/char_names.inc` as `kStatusShortNames` / `kStatusLongNames`.)
+(Dumped straight from the image: `0x3cca0` holds `Good  Mad   Ill
+Poisn Blnd. Stun. Stone Dead ` and `0x3ccd0` holds
+`Good\0Mad\0Ill\0Poisoned\0Blind\0Stunned\0Stoned\0Dead\0`. The same names
+are emitted into `lof2/port/char_names.inc` as `kStatusShortNames` /
+`kStatusLongNames`. Note that an earlier revision of this file cited
+`0x42190`, which is a bank message, not the status table.)
 
 Proof that `+0x1f` is this byte and not something else:
 
@@ -110,11 +114,23 @@ The revive routine refuses any character whose `hp_max` is already 0
 So after one failed attempt the character is stuck: `Dead` with `hp_max = 0`
 can never pass the guard, and no in-game action writes `hp_max` back.
 
+The direction of that branch is not a guess. The success path above never
+writes `+0x20`: it only sets status, decrements Con, adds experience and
+clamps `hp_cur`. So if the guard let an `hp_max == 0` corpse through, the
+"revived" character would keep `hp_max == 0` for good -- alive with a
+maximum of zero hit points, which the rest of the engine treats as a
+degenerate case (every `hp_max` reader divides by it behind a zero check).
+`0xA8FE` is the only write of `hp_max = 0` in the image, and it sits on the
+failure path, so the guard exists to stop exactly that state from being
+revived. Hence `je 0xa7b4` takes the refusal branch.
+
 ## Consequence for the tool
 
 `status == Dead && hp_max == 0` is a dead end that no normal death produces
-(death keeps `hp_max`). It is a genuine corruption and is worth reporting and
-repairing.
+(death keeps `hp_max`). It is **not corruption**: the engine writes it itself
+when a temple revive fails, so both `ROST` and `ROST3` are valid game states.
+The tool reports which marker values are present and can put the character
+back into the ordinary dead state so the temple will accept it again.
 
 The max HP value itself is **not recoverable from the file**: the failed
 revive overwrote it and the 410-byte struct holds no shadow copy. In the
