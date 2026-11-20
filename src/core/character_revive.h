@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
 #include "core/character.h"
 
@@ -11,8 +10,8 @@ namespace loftools {
 
 // The values the game uses to mark a character Dead, and to mark a corpse it
 // will no longer raise.  Both are ordinary game states written by the engine
-// itself, not corruption: a normal death writes one set of values and a failed
-// temple revive writes another.  See docs/character-status-and-revive.md.
+// itself, not corruption and not the result of editing a file: a normal death
+// writes one set of values, a failed temple revive writes another.
 //
 //   field      offset   death writes   failed revive writes
 //   status     +0x1f    7 (Dead)       7 (unchanged)
@@ -20,8 +19,11 @@ namespace loftools {
 //   hp_cur     +0x22    0              0
 //
 // So `status == 7` is what marks the character dead, and `hp_max == 0` is what
-// marks it unrevivable: the revive routine refuses a corpse whose max HP is 0,
-// and nothing in the game ever writes max HP back afterwards.
+// marks it unrevivable: the revive routine refuses a corpse whose max HP is 0
+// (asm 0xA7AA), and nothing in the game ever writes max HP back afterwards.
+//
+// Because this is a legitimate game state and not tampering, it belongs in the
+// character editor, not in the cheat-protection sanitizer.
 enum class ReviveState {
     Alive,        // status is not Dead
     Dead,         // status == 7 and hp_max > 0: dead, the temple can still raise it
@@ -30,41 +32,39 @@ enum class ReviveState {
 
 const char* revive_state_name(ReviveState s);
 
-// One field a repair would change.
-struct FieldChange {
-    size_t offset = 0;       // byte offset inside the 410-byte struct
-    std::string field;       // human-readable field name, e.g. "max HP"
-    uint32_t old_value = 0;  // value in the file
-    uint32_t new_value = 0;  // value a repair would write
-};
+// A short human-readable description of the character's condition.
+std::string revive_state_detail(const Character& c);
 
-// The revive state of one character plus what a repair would change.
-struct ReviveFinding {
-    ReviveState state = ReviveState::Alive;
-    std::string detail;                // human-readable explanation
-    std::vector<FieldChange> changes;  // what a repair would change
-};
-
-// Classify one character.  Empty slots are reported as Alive with no detail.
 ReviveState revive_state(const Character& c);
-ReviveFinding diagnose_revive(const Character& c, uint16_t hp_max = 0);
 
-// Turn an Unrevivable corpse back into a Dead one the temple can raise.
+// Estimate a plausible maximum HP for a character whose real value was
+// destroyed by a failed revive.
 //
-// Only max HP is restored, because max HP is the only field the failed revive
-// destroyed -- status is still the ordinary Dead value and current HP is still
-// 0, exactly as a normal death leaves them.  The character therefore ends up in
-// the same state as any other corpse: still dead, and now revivable again.
+// The engine builds max HP from two things only (asm):
+//   * at creation  hp_max = rand(1 .. n/2) + n/2, where n is the class record's
+//     HP seed (`rec[0x2c]`, see lof2 docs/notes-b.md);
+//   * on every level-up it adds rand(1..10) to max and current HP
+//     (`0x9164`..`0x91A6`, `add word ptr es:[bx+si+0x20], ax`).
 //
-// `hp_max` is the maximum HP to restore.  It is not recoverable from the file:
-// the failed revive overwrote it and the 410-byte struct keeps no copy, so the
-// value has to come from the player (or a backup).  Pass 0 to use the engine's
-// own floor of 1 -- the revive path clamps max HP to >= 1 itself (asm 0xAA06).
+// So max HP is a random walk from a random start, and the exact value cannot be
+// recovered from the file -- the failed revive overwrote it and the 410-byte
+// struct keeps no copy.  The level is the only useful input: the shipped
+// characters roll 5..18 max HP at level 1 (mean 11.5), and each level after that
+// adds 1..10 (mean 5.5).  This returns the mean of that distribution, which is
+// the most defensible "plausible" value; it is an estimate, not the original.
 //
-// Returns the finding that was applied, or a default (Alive) finding when there
-// was nothing to do.  Callers write the file afterwards; the document save path
-// refreshes the checksums, so the change never trips the cheat protection.
-ReviveFinding repair_revive(Character& c, uint16_t hp_max = 0);
+// The result is always >= 1: the engine never creates a character with less
+// (creation clamps at `0x1DA84`).
+uint16_t estimate_hp_max(const Character& c);
+
+// Restore revivability: give an unrevivable corpse a plausible max HP so the
+// temple will accept it again.
+//
+// Only max HP is written.  Status stays 7 and current HP stays 0, so the
+// character remains properly dead -- this does not resurrect anyone, it just
+// undoes the damage the failed revive did.  Returns true when it changed
+// anything.
+bool restore_revivability(Character& c);
 
 }  // namespace loftools
 

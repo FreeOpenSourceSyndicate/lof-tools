@@ -127,19 +127,57 @@ revived. Hence `je 0xa7b4` takes the refusal branch.
 ## Consequence for the tool
 
 `status == Dead && hp_max == 0` is a dead end that no normal death produces
-(death keeps `hp_max`). It is **not corruption**: the engine writes it itself
-when a temple revive fails, so both `ROST` and `ROST3` are valid game states.
-The tool reports which marker values are present and can put the character
-back into the ordinary dead state so the temple will accept it again.
+(death keeps `hp_max`). It is **not corruption**, and it is not something the
+cheat protection cares about: the engine writes it itself when a temple revive
+fails, so `ROST3` is a perfectly valid file. It therefore does **not** belong in
+the sanitizer, which only reports what the game's cheat protection would flag.
 
-The max HP value itself is **not recoverable from the file**: the failed
-revive overwrote it and the 410-byte struct holds no shadow copy. In the
-`ROST` / `ROST3` pair every byte except the status/HP/Con/exp fields is
-identical, which confirms there is nothing to restore from. The repair
-therefore needs the value supplied from outside the file (the number the
-character had before the failed attempt, or a value from a backup), with a
-provable floor of 1 — the engine never creates or revives a character with
-less (`1DA84` clamps creation to >= 1, `0AA06` clamps revive to >= 1).
+It belongs in the **character editor**, which shows the condition and offers a
+*Restore revivability* button. The button only writes max HP; status stays
+`Dead` and current HP stays 0, so the character is still properly dead and can
+then be revived normally at the temple.
+
+### Where a plausible max HP comes from
+
+The real value is **not recoverable from the file**: the failed revive
+overwrote it and the 410-byte struct holds no shadow copy. In the `ROST` /
+`ROST3` pair every byte except the status/HP/Con/exp fields is identical, which
+confirms there is nothing to restore from.
+
+The engine builds max HP in exactly two places, so a plausible value can be
+estimated from the level:
+
+* **At creation** (`1DA40`..`1DA8E`): `hp_max` (and `hp_cur`) =
+  `rand(1 .. n/2) + n/2`, where `n` is the class record's HP seed
+  (`rec[0x2c]`; see lof2 `docs/notes-b.md`). Creation then clamps to `>= 1`
+  (`1DA84`).
+* **On every level-up** (`9164`..`91A6`): `rand(1..10)` is added to **both**
+  `+0x22` and `+0x20` (`add word ptr es:[bx + si + 0x20], ax`).
+
+So max HP is a random walk: a random creation roll plus 1..10 per level gained.
+The shipped characters roll 5..18 at level 1 (mean 11.5) and gain a mean of 5.5
+per level after that. `estimate_hp_max()` returns that mean --
+`11.5 + 5.5 * (level - 1)` -- which lands in the middle of what the game could
+legitimately have rolled. Against the maintainer's roster, excluding the
+unfinished first slot and the two deliberately inflated cheat characters, it is
+within 1.5 HP on average and 7 HP at worst.
+
+It is an estimate, not the original value, and the editor labels it as such.
+
+### The revive path's own clamp
+
+Note that the revive success path clamps **current** HP, not max HP:
+
+```
+0A9FA: add ax, 0x22          ; -> current HP field
+0AA06: cmp word ptr es:[bx], 1
+0AA0A: jge 0xaa11
+0AA0C: mov word ptr es:[bx], 1   ; hp_cur = max(hp_cur, 1)
+```
+
+So `0xAA06` guarantees a revived character has at least 1 **current** HP; it
+says nothing about max HP. The `>= 1` floor for max HP comes from creation
+(`1DA84`).
 
 ## Observed data
 

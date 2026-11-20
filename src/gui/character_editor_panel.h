@@ -36,8 +36,11 @@ signals:
 
 private slots:
     void on_any_change();
+    void on_restore_revivability();
 
 private:
+    void update_revive_note();
+
     QLineEdit* name_ = nullptr;
     QSpinBox* level_ = nullptr;
     QComboBox* sex_ = nullptr;
@@ -67,6 +70,9 @@ private:
 
     QTableWidget* inventory_ = nullptr;
     QTableWidget* spells_ = nullptr;
+    QComboBox* status_ = nullptr;
+    QLabel* revive_note_ = nullptr;
+    QPushButton* restore_ = nullptr;
     QLabel* derived_ = nullptr;
     bool loading_ = false;
 };

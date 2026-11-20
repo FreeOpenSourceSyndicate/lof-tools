@@ -20,20 +20,6 @@ struct Finding {
     std::string character;   // character name, empty for whole-file issues
     std::string detail;      // what is wrong
     bool fixed = false;      // true once the repair has been applied
-
-    // Set when this finding is a valid game state the player cannot recover
-    // from in-game (a corpse the temple will no longer raise, see
-    // core/character_revive.h) rather than a cheat-protection problem.  Such a
-    // finding never makes the file "flagged".
-    bool revive_blocked = false;
-    // Informational only: a dead character that is still revivable.  Listed so
-    // the player can see which values mark a character dead, but it is not a
-    // problem and does not enable the fix button.
-    bool informational = false;
-    // For a revive finding: the max HP a repair should restore.  The value
-    // cannot be recovered from the file, so it is supplied by the caller of
-    // sanitize(); 0 means "use the engine's floor of 1".
-    uint16_t repair_hp_max = 0;
 };
 
 struct SanitizeReport {
@@ -45,19 +31,9 @@ struct SanitizeReport {
     // Whole-file state.
     bool flagged = false;        // the engine would refuse/flag this file
     bool fixed = false;          // a repair was applied and saved
-    // True when at least one dead character can no longer be revived in game.
-    bool has_unrevivable = false;
 
     std::vector<Finding> findings;
     std::string summary;         // one-line result for the UI
-
-    // Findings that are actual problems (excludes informational entries).
-    size_t problem_count() const {
-        size_t n = 0;
-        for (const Finding& f : findings)
-            if (!f.informational) ++n;
-        return n;
-    }
 };
 
 // Detect the format of an in-memory image by magic / size heuristics.
@@ -70,14 +46,7 @@ SanitizeReport inspect(const std::string& path);
 // Inspect and, if needed, repair.  Writes the repaired file back to `path`
 // (or to `out_path` when non-empty).  Returns the report; report.fixed is set
 // when bytes were written.
-//
-// `repair_hp_max` supplies the maximum HP to restore for a corpse the temple
-// will no longer raise (see core/character_revive.h).  It cannot be recovered
-// from the file; 0 uses the engine's floor of 1.  Pass a slot-specific override
-// through `repair_hp_max_for` to set a different value per character index.
-SanitizeReport sanitize(const std::string& path, const std::string& out_path = "",
-                        uint16_t repair_hp_max = 0,
-                        const std::vector<uint16_t>* repair_hp_max_for = nullptr);
+SanitizeReport sanitize(const std::string& path, const std::string& out_path = "");
 
 }  // namespace loftools
 

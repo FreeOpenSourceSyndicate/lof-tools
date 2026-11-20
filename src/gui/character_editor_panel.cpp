@@ -1,5 +1,7 @@
 #include "gui/character_editor_panel.h"
 
+#include "core/character_revive.h"
+
 #include <algorithm>
 
 #include <QBrush>
@@ -147,6 +149,27 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     vit_form->addRow(tr("Spells known (count)"), spell_count_);
     flow->addWidget(vitals);
 
+    // Condition / revivability.  A dead character is a normal game state, so it
+    // is shown here rather than in the sanitizer; the button only helps when the
+    // corpse is one the temple will no longer raise.
+    auto* cond = new QGroupBox(tr("Condition"), this);
+    auto* cond_form = new QFormLayout(cond);
+    status_ = new QComboBox(cond);
+    for (uint8_t i = 0; i < kStatusCount; ++i)
+        status_->addItem(QString::fromLatin1(status_long_name(i)), (int)i);
+    cond_form->addRow(tr("Status"), status_);
+    revive_note_ = new QLabel(cond);
+    revive_note_->setWordWrap(true);
+    cond_form->addRow(revive_note_);
+    restore_ = new QPushButton(tr("Restore revivability"), cond);
+    restore_->setToolTip(tr("The temple refuses a corpse whose max HP is 0. A "
+                            "failed revive zeroes max HP and the game never "
+                            "restores it, so this sets a plausible value "
+                            "estimated from the character's level. The character "
+                            "stays dead and can then be revived normally."));
+    cond_form->addRow(restore_);
+    flow->addWidget(cond);
+
     auto* money = new QGroupBox(tr("Money && Progress"), this);
     auto* money_form = new QFormLayout(money);
     exp_ = make_spin(-2147483647, 2147483647, this);
@@ -243,6 +266,10 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
     connect(wis_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(hp_cur_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(hp_max_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
+    connect(status_, &QComboBox::currentIndexChanged, this,
+            &CharacterForm::on_any_change);
+    connect(restore_, &QPushButton::clicked, this,
+            &CharacterForm::on_restore_revivability);
     connect(mp_cur_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(mp_max_, &QSpinBox::valueChanged, this, &CharacterForm::on_any_change);
     connect(spell_count_, &QSpinBox::valueChanged, this,
@@ -260,7 +287,40 @@ CharacterForm::CharacterForm(QWidget* parent) : QWidget(parent) {
 }
 
 void CharacterForm::on_any_change() {
+    update_revive_note();
     if (!loading_) emit changed();
+}
+
+// Keep the condition note and the restore button in step with the widgets, so
+// they follow edits before they are written back to the character.
+void CharacterForm::update_revive_note() {
+    const bool dead = status_->currentData().toInt() == (int)kStatusDead;
+    const bool blocked = dead && hp_max_->value() == 0;
+
+    if (!dead) {
+        revive_note_->setText(tr("Alive."));
+        revive_note_->setStyleSheet(QString());
+    } else if (!blocked) {
+        revive_note_->setText(tr("Dead. The temple can still revive this "
+                                 "character."));
+        revive_note_->setStyleSheet(QString());
+    } else {
+        revive_note_->setText(tr("Dead with max HP 0: the temple will refuse to "
+                                 "revive this character. A failed revive zeroes "
+                                 "max HP and the game never restores it."));
+        revive_note_->setStyleSheet("color: #b35c00;");
+    }
+    restore_->setEnabled(blocked);
+}
+
+void CharacterForm::on_restore_revivability() {
+    // Estimate from the level rather than from the current max HP, which is the
+    // destroyed value.  The character stays dead; this only makes it revivable.
+    Character probe;
+    probe.set_present(true);
+    probe.set_level((uint8_t)level_->value());
+    hp_max_->setValue(estimate_hp_max(probe));
+    update_revive_note();
 }
 
 void CharacterForm::load(const Character& c) {
@@ -280,6 +340,8 @@ void CharacterForm::load(const Character& c) {
 
     hp_cur_->setValue(c.hp_cur());
     hp_max_->setValue(c.hp_max());
+    status_->setCurrentIndex(status_->findData((int)c.status()));
+    update_revive_note();
     mp_cur_->setValue(c.mp_cur());
     mp_max_->setValue(c.mp_max());
     spell_count_->setValue(c.spell_count());
@@ -349,6 +411,7 @@ void CharacterForm::apply(Character& c) const {
 
     c.set_hp_cur((uint16_t)hp_cur_->value());
     c.set_hp_max((uint16_t)hp_max_->value());
+    c.set_status((uint8_t)status_->currentData().toInt());
     c.set_mp_cur((uint8_t)mp_cur_->value());
     c.set_mp_max((uint8_t)mp_max_->value());
 

@@ -4,12 +4,7 @@
 //   lof-cli fix     <file> [out]      repair in place (or write to `out`)
 //   lof-cli dump    <file>            print every character field it can decode
 //   lof-cli state   <file>            print save-game state (party, position)
-//
-// `fix` accepts `--hp-max <n>` to set the max HP restored for an unrevivable
-// character (see docs/character-status-and-revive.md); without it the engine's
-// floor of 1 is used.
 #include <cstdio>
-#include <cstdlib>
 #include <string>
 
 #include "core/document.h"
@@ -33,22 +28,13 @@ static void print_report(const SanitizeReport& rep, bool verbose) {
         std::printf("error: %s\n", rep.error.c_str());
         return;
     }
-    if (rep.flagged)
-        std::printf("state: FLAGGED by cheat protection\n");
-    else if (rep.has_unrevivable)
-        std::printf("state: passes cheat protection; a dead character can no "
-                    "longer be revived\n");
-    else
-        std::printf("state: clean\n");
+    std::printf("state: %s\n", rep.flagged ? "FLAGGED by cheat protection" : "clean");
     if (verbose) {
         for (const auto& f : rep.findings) {
-            std::printf("  - %s%s: %s%s%s\n",
+            std::printf("  - %s%s: %s%s\n",
                         f.slot >= 0 ? "slot " : "",
                         f.slot >= 0 ? std::to_string(f.slot).c_str() : "file",
                         f.character.empty() ? "" : (f.character + ": ").c_str(),
-                        f.informational ? "[info] "
-                        : f.revive_blocked ? "[dead] "
-                                           : "[cheat] ",
                         f.detail.c_str());
         }
     }
@@ -154,7 +140,7 @@ int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr,
                      "usage: lof-cli check <file>\n"
-                     "       lof-cli fix   <file> [out] [--hp-max <n>]\n"
+                     "       lof-cli fix   <file> [out]\n"
                      "       lof-cli dump  <file>\n"
                      "       lof-cli state <file>\n");
         return 2;
@@ -162,26 +148,14 @@ int main(int argc, char** argv) {
     const std::string cmd = argv[1];
     const std::string path = argv[2];
 
-    // `fix` takes an optional output path and an optional --hp-max value; pull
-    // the option out of the remaining arguments wherever it appears.
-    std::string out;
-    uint16_t hp_max = 0;
-    for (int i = 3; i < argc; ++i) {
-        const std::string a = argv[i];
-        if (a == "--hp-max" && i + 1 < argc) {
-            hp_max = (uint16_t)std::strtoul(argv[++i], nullptr, 10);
-        } else if (out.empty()) {
-            out = a;
-        }
-    }
-
     if (cmd == "check") {
         SanitizeReport rep = inspect(path);
         print_report(rep, true);
         return rep.flagged ? 1 : 0;
     }
     if (cmd == "fix") {
-        SanitizeReport rep = sanitize(path, out, hp_max);
+        const std::string out = argc > 3 ? argv[3] : "";
+        SanitizeReport rep = sanitize(path, out);
         print_report(rep, true);
         return rep.file_ok ? 0 : 1;
     }

@@ -7,10 +7,8 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QSpinBox>
 #include <QTableWidget>
 #include <QVBoxLayout>
-#include <QWidget>
 
 namespace loftools {
 
@@ -33,27 +31,6 @@ SanitizerPanel::SanitizerPanel(QWidget* parent) : ToolPanel(parent) {
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionMode(QAbstractItemView::NoSelection);
     root->addWidget(table_, 1);
-
-    // Max HP to restore for an unrevivable character.  A failed temple revive
-    // zeroes max HP and the value is not stored anywhere in the record, so it
-    // has to come from the user (or from a backup).  Hidden when no character
-    // needs it.
-    hp_row_ = new QWidget(this);
-    auto* hp_layout = new QHBoxLayout(hp_row_);
-    hp_layout->setContentsMargins(0, 0, 0, 0);
-    hp_layout->addWidget(new QLabel(tr("Max HP to restore for the dead "
-                                       "character:"), hp_row_));
-    hp_max_ = new QSpinBox(hp_row_);
-    hp_max_->setRange(1, 32767);
-    hp_max_->setValue(1);
-    hp_max_->setToolTip(tr("The character's maximum hit points.  A failed temple "
-                           "revive sets max HP to 0 and the value is not stored "
-                           "anywhere in the file, so it has to be supplied here "
-                           "(use a backup if you have one).  Minimum is 1."));
-    hp_layout->addWidget(hp_max_);
-    hp_layout->addStretch(1);
-    root->addWidget(hp_row_);
-    hp_row_->setVisible(false);
 
     auto* buttons = new QHBoxLayout();
     recheck_button_ = new QPushButton(tr("Re-check"), this);
@@ -96,26 +73,12 @@ void SanitizerPanel::set_report(const SanitizeReport& rep) {
         verdict_label_->setText(tr("Cannot read as a %1: %2")
                                     .arg(kind)
                                     .arg(QString::fromStdString(rep.error)));
-    } else if (rep.flagged && rep.has_unrevivable) {
-        verdict_label_->setStyleSheet("color: #b00020;");
-        verdict_label_->setText(tr("Format: %1 - the cheat protection WOULD flag "
-                                   "this file, and it also has %2 character "
-                                   "problem(s).")
-                                    .arg(kind)
-                                    .arg(rep.findings.size()));
     } else if (rep.flagged) {
         verdict_label_->setStyleSheet("color: #b00020;");
         verdict_label_->setText(tr("Format: %1 - the cheat protection WOULD flag "
                                    "this file (%2 problem(s)).")
                                     .arg(kind)
                                     .arg(rep.findings.size()));
-    } else if (rep.has_unrevivable) {
-        verdict_label_->setStyleSheet("color: #b35c00;");
-        verdict_label_->setText(
-            tr("Format: %1 - passes the cheat protection. %2 dead character(s) "
-               "the temple will no longer revive (max HP 0).")
-                .arg(kind)
-                .arg(rep.findings.size()));
     } else {
         verdict_label_->setStyleSheet("color: #1b7f3b;");
         verdict_label_->setText(
@@ -129,11 +92,7 @@ void SanitizerPanel::set_report(const SanitizeReport& rep) {
         const QString slot = f.slot >= 0 ? QString::number(f.slot) : tr("(whole file)");
         table_->setItem(i, 0, new QTableWidgetItem(slot));
         table_->setItem(i, 1, new QTableWidgetItem(QString::fromStdString(f.character)));
-        const QString tag = f.informational ? tr("[info] ")
-                            : f.revive_blocked ? tr("[dead] ")
-                                               : QString();
-        const QString detail = tag + QString::fromStdString(f.detail);
-        table_->setItem(i, 2, new QTableWidgetItem(detail));
+        table_->setItem(i, 2, new QTableWidgetItem(QString::fromStdString(f.detail)));
         table_->setItem(i, 3, new QTableWidgetItem(f.fixed ? tr("yes") : tr("")));
     }
 
@@ -142,19 +101,16 @@ void SanitizerPanel::set_report(const SanitizeReport& rep) {
 
 void SanitizerPanel::update_buttons() {
     const bool loaded = report_.file_ok;
-    const bool can_fix =
-        loaded && (report_.flagged || report_.has_unrevivable) && !report_.fixed;
+    const bool can_fix = loaded && report_.flagged && !report_.fixed;
     recheck_button_->setEnabled(loaded);
     fix_button_->setEnabled(can_fix);
     fix_button_->setToolTip(can_fix ? tr("Write the repaired file back to disk")
                                     : tr("Nothing to fix"));
-    hp_row_->setVisible(loaded && report_.has_unrevivable && !report_.fixed);
 }
 
 void SanitizerPanel::fix() {
     if (path_.isEmpty()) return;
-    SanitizeReport rep = sanitize(path_.toStdString(), "",
-                                  (uint16_t)hp_max_->value());
+    SanitizeReport rep = sanitize(path_.toStdString());
     set_report(rep);
     if (rep.fixed) {
         QMessageBox::information(

@@ -90,22 +90,21 @@ tools appear as new tabs):
 - **Sanitizer** - lists every problem the cheat protection would find (per
   character for a roster, whole-file for a save) and offers **Fix & Save** to
   write the repaired file back.
-
-  It also reports the two values the game uses to mark a character as out of
-  action: status `7` marks it **dead**, and max HP `0` marks a corpse the temple
-  will **no longer revive** (a failed temple revive zeroes max HP; the revive
-  routine then refuses the corpse for good). Neither is corruption - both are
-  states the engine writes itself - so they are shown as findings, not as cheat
-  protection failures. Dead-but-revivable characters are listed for information;
-  an unrevivable one can be repaired by restoring its max HP (the value is not
-  stored in the file, so supply it, or take the engine's floor of 1). See
-  [`docs/character-status-and-revive.md`](docs/character-status-and-revive.md).
 - **Character editor** - edits a `ROST` roster or a save game one character at a
   time: identity, attributes, hit/magic points, experience, gold (purse and
   deposit), rations, the nine skills, the eight languages, the inventory (48
   slots, with item, equipped flag, condition and charges) and the spell list.
   Saving recomputes the integrity checksum, so the game's cheat protection
   accepts the file.
+
+  The **Condition** group shows the status byte and flags a character that died
+  and then had a *temple revive fail*: that leaves status `Dead` with max HP
+  `0`, and the temple refuses such a corpse for good. A **Restore revivability**
+  button sets a plausible max HP, estimated from the character's level using the
+  engine's own HP model. It only restores max HP -- the character stays dead and
+  can then be revived normally. This is a normal game state, so it is reported
+  here and not by the sanitizer. See
+  [`docs/character-status-and-revive.md`](docs/character-status-and-revive.md).
 
   Its field groups reflow: they pack into as many rows as the window width
   allows, so narrowing the window adds rows instead of a horizontal scrollbar.
@@ -140,9 +139,6 @@ displays.
 # Repair into a new file (leaves the original alone):
 ./build/lof-cli fix ROST/ROST ROST/ROST.fixed
 
-# Repair a corpse the temple will no longer revive, restoring its max HP
-# (a failed revive zeroes max HP and the file keeps no copy of the old value):
-./build/lof-cli fix ROST3 ROST3.fixed --hp-max 5
 
 # Print every decoded character field (read-only):
 ./build/lof-cli dump ROST/ROST

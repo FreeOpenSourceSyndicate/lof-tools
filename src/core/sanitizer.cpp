@@ -3,7 +3,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "core/character_revive.h"
 #include "core/checksum.h"
 #include "core/file_io.h"
 
@@ -38,41 +37,6 @@ void repair_record(RostRecord& rec, Finding& f) {
     rec.recompute();
     rec.status = RecordStatus::Ok;
     f.fixed = changed;
-}
-
-// Report a corpse the temple will no longer raise.  This is a valid game state,
-// not tampering, so it never sets `flagged`; it is listed so the player can see
-// which marker value the game is acting on and repair it if they choose.
-void report_revive(SanitizeReport& rep, size_t slot, const Character& c,
-                   uint16_t hp_max) {
-    if (!c.present()) return;
-    const ReviveFinding d = diagnose_revive(c, hp_max);
-    if (d.state == ReviveState::Alive) return;
-
-    Finding f;
-    f.slot = (int)slot;
-    f.character = c.name();
-    f.repair_hp_max = hp_max;
-
-    if (d.state == ReviveState::Dead) {
-        f.informational = true;
-        f.detail = "dead: status " + std::to_string(c.status()) + " (" +
-                   status_short_name(c.status()) + "), max HP " +
-                   std::to_string(c.hp_max()) + ", current HP " +
-                   std::to_string(c.hp_cur()) +
-                   " - the temple can still revive this character.";
-        rep.findings.push_back(std::move(f));
-        return;
-    }
-
-    f.revive_blocked = true;
-    f.detail = std::string(revive_state_name(d.state)) + ": " + d.detail;
-    for (const FieldChange& ch : d.changes) {
-        f.detail += " [" + ch.field + " " + std::to_string(ch.old_value) +
-                    " -> " + std::to_string(ch.new_value) + "]";
-    }
-    rep.has_unrevivable = true;
-    rep.findings.push_back(std::move(f));
 }
 
 void report_rost(SanitizeReport& rep, const RostFile& rost) {
@@ -131,8 +95,6 @@ SanitizeReport inspect(const std::string& path) {
             }
             rep.file_ok = true;
             report_rost(rep, rost);
-            for (size_t i = 0; i < rost.records.size(); ++i)
-                report_revive(rep, i, rost.records[i].character, 0);
             break;
         }
         case FileKind::SaveGame: {
@@ -155,16 +117,13 @@ SanitizeReport inspect(const std::string& path) {
             }
             for (size_t i = 0; i < sv.party.size(); ++i) {
                 const Character& c = sv.party[i];
-                if (!c.present()) continue;
-                if (c.tampered()) {
-                    Finding f;
-                    f.slot = (int)i;
-                    f.character = c.name();
-                    f.detail = "tamper flag set (byte 0x0C = " +
-                               hex8(c.tamper_flag()) + ")";
-                    rep.findings.push_back(std::move(f));
-                }
-                report_revive(rep, i, c, 0);
+                if (!c.present() || !c.tampered()) continue;
+                Finding f;
+                f.slot = (int)i;
+                f.character = c.name();
+                f.detail = "tamper flag set (byte 0x0C = " +
+                           hex8(c.tamper_flag()) + ")";
+                rep.findings.push_back(std::move(f));
             }
             break;
         }
@@ -174,33 +133,16 @@ SanitizeReport inspect(const std::string& path) {
             return rep;
     }
 
-    const bool cheat = rep.flagged;
-    const bool dmg = rep.has_unrevivable;
-    if (cheat && dmg) {
-        rep.summary = "The cheat protection WOULD flag this file and it has " +
-                      std::to_string(rep.problem_count()) +
-                      " problem(s) in total.";
-    } else if (cheat) {
+    if (rep.flagged) {
         rep.summary = "Cheat protection WOULD flag this file (" +
-                      std::to_string(rep.problem_count()) + " problem(s)).";
-    } else if (dmg) {
-        rep.summary = "File passes the cheat protection. It has " +
-                      std::to_string(rep.problem_count()) +
-                      " dead character(s) the temple will no longer revive "
-                      "(max HP 0).";
-    } else if (!rep.findings.empty()) {
-        rep.summary = "File passes the cheat protection; " +
-                      std::to_string(rep.findings.size()) +
-                      " dead character(s), all still revivable.";
+                      std::to_string(rep.findings.size()) + " problem(s)).";
     } else {
         rep.summary = "File is clean; the cheat protection would not flag it.";
     }
     return rep;
 }
 
-SanitizeReport sanitize(const std::string& path, const std::string& out_path,
-                        uint16_t repair_hp_max,
-                        const std::vector<uint16_t>* repair_hp_max_for) {
+SanitizeReport sanitize(const std::string& path, const std::string& out_path) {
     SanitizeReport rep;
     rep.path = path;
 
@@ -210,14 +152,6 @@ SanitizeReport sanitize(const std::string& path, const std::string& out_path,
         rep.summary = "Cannot open file.";
         return rep;
     }
-
-    // Per-character max-HP value to restore: the explicit per-slot table wins,
-    // then the single value, then the engine floor of 1.
-    const auto hp_max_for = [&](size_t slot) -> uint16_t {
-        if (repair_hp_max_for && slot < repair_hp_max_for->size())
-            return (*repair_hp_max_for)[slot];
-        return repair_hp_max;
-    };
 
     rep.kind = detect_kind(file);
     std::vector<uint8_t> repaired;
@@ -232,26 +166,12 @@ SanitizeReport sanitize(const std::string& path, const std::string& out_path,
             }
             rep.file_ok = true;
             report_rost(rep, rost);
-            for (size_t i = 0; i < rost.records.size(); ++i)
-                report_revive(rep, i, rost.records[i].character, hp_max_for(i));
-
-            // Cheat repairs first: clear the tamper flag and refresh the
-            // trailer on every record the protection would reject.
+            rep.flagged = !rep.findings.empty();
             for (size_t i = 0; i < rost.records.size(); ++i) {
                 if (rost.records[i].status == RecordStatus::Ok) continue;
                 for (auto& f : rep.findings) {
-                    if (f.slot == (int)i && !f.revive_blocked)
-                        repair_record(rost.records[i], f);
+                    if (f.slot == (int)i) repair_record(rost.records[i], f);
                 }
-            }
-            // Then the character repairs, which change the struct bytes; the
-            // recompute in serialize_rost keeps the trailers consistent.
-            for (size_t i = 0; i < rost.records.size(); ++i) {
-                if (!rost.records[i].character.present()) continue;
-                if (repair_revive(rost.records[i].character, hp_max_for(i)).changes.empty())
-                    continue;
-                for (auto& f : rep.findings)
-                    if (f.slot == (int)i && f.revive_blocked) f.fixed = true;
             }
             repaired = serialize_rost(rost);
             break;
@@ -265,51 +185,35 @@ SanitizeReport sanitize(const std::string& path, const std::string& out_path,
             }
             rep.file_ok = true;
             rep.flagged = !sv.intact();
+            bool any = false;
             for (size_t i = 0; i < sv.party.size(); ++i) {
-                const Character& c = sv.party[i];
-                if (!c.present()) continue;
-                if (c.tampered()) {
-                    Finding f;
-                    f.slot = (int)i;
-                    f.character = c.name();
-                    f.detail = "tamper flag set (byte 0x0C = " +
-                               hex8(c.tamper_flag()) + ")";
-                    rep.findings.push_back(std::move(f));
-                }
-                report_revive(rep, i, c, hp_max_for(i));
+                Character& c = sv.party[i];
+                if (!c.present() || !c.tampered()) continue;
+                any = true;
+                Finding f;
+                f.slot = (int)i;
+                f.character = c.name();
+                f.detail = "tamper flag set (byte 0x0C = " + hex8(c.tamper_flag()) + ")";
+                c.set_byte(char_off::kTamperFlag, 0);
+                f.fixed = true;
+                rep.findings.push_back(std::move(f));
             }
             if (!sv.checksum_ok) {
+                any = true;
                 Finding f;
                 f.slot = -1;
                 f.character = "";
                 f.detail = "save-game checksum mismatch (stored " +
                            hex32(sv.stored_checksum) + ", actual " +
                            hex32(sv.actual_checksum) + ")";
+                f.fixed = true;
                 rep.findings.push_back(std::move(f));
             }
-
-            bool any = false;
-            for (size_t i = 0; i < sv.party.size(); ++i) {
-                Character& c = sv.party[i];
-                if (!c.present()) continue;
-                if (c.tampered()) {
-                    c.set_byte(char_off::kTamperFlag, 0);
-                    any = true;
-                    for (auto& f : rep.findings)
-                        if (f.slot == (int)i && !f.revive_blocked) f.fixed = true;
-                }
-                if (!repair_revive(c, hp_max_for(i)).changes.empty()) {
-                    any = true;
-                    for (auto& f : rep.findings)
-                        if (f.slot == (int)i && f.revive_blocked) f.fixed = true;
-                }
+            if (any) {
+                repaired = serialize_save(sv);
+            } else {
+                repaired = file;
             }
-            if (!sv.checksum_ok) {
-                any = true;
-                for (auto& f : rep.findings)
-                    if (f.slot < 0) f.fixed = true;
-            }
-            repaired = any ? serialize_save(sv) : file;
             break;
         }
         case FileKind::Unknown:
@@ -330,11 +234,11 @@ SanitizeReport sanitize(const std::string& path, const std::string& out_path,
         rep.fixed = true;
     }
 
-    if (rep.fixed) {
-        rep.summary = "Wrote the repair; the file still passes the cheat "
-                      "protection and the character can be revived again.";
-    } else if (!rep.findings.empty()) {
-        rep.summary = "Problems found but nothing needed writing.";
+    if (rep.flagged) {
+        rep.summary = rep.fixed
+            ? "Repaired " + std::to_string(rep.findings.size()) +
+                  " problem(s); file now passes the cheat protection."
+            : "Problems found but nothing needed writing.";
     } else {
         rep.summary = "File was already clean; nothing to fix.";
     }

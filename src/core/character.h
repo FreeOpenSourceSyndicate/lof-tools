@@ -198,8 +198,9 @@ public:
     // but max HP is 0.  Normal death never zeroes max HP, and the revive
     // routine refuses a corpse with max HP 0 (asm 0xA7AA), so such a character
     // can never be revived again in game.  The lost max-HP value is not stored
-    // anywhere in the 410-byte struct, so repairing it needs a value from
-    // outside the file.  Prefer core/character_revive.h over this predicate.
+    // anywhere in the 410-byte struct.  The character editor restores a
+    // plausible value via core/character_revive.h; prefer that module over this
+    // predicate.
     bool unrevivable() const { return is_dead() && hp_max() == 0; }
 
     uint16_t hp_max() const { return word(char_off::kHpMax); }
